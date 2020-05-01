@@ -1,0 +1,28 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.0.8'
+}
+
+group 'com.cd00827'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+javafx {
+    version = "14"
+    modules = [ 'javafx.controls', 'javafx.fxml' ]
+}
+
+mainClassName = 'com.cd00827.OSSimulator.MainApp'
