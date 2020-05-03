@@ -15,41 +15,43 @@ public class MMU {
         this.pageTable = new HashMap<Integer, Map<Integer, Integer>>();
     }
 
-    public Address read(int pid, int address) {
+    public Address read(int pid, int address) throws AddressingException {
         int page = address / this.pageSize;
+        this.checkAllocated(pid, page);
         int offset = address % this.pageSize;
         return this.ram[this.pageTable.get(pid).get(page) + offset];
     }
 
-    private boolean isAllocated(int pid, int page) {
-        if (this.pageTable.get(pid).containsKey(page)) {
-            return true;
-        }
-        else {
-            return false;
+    private void checkAllocated(int pid, int page) throws AddressingException {
+        if (!this.pageTable.get(pid).containsKey(page)) {
+            throw new AddressingException("PID " + pid + " attempted to access memory it hasn't been allocated");
         }
     }
 
-    public void write(int pid, int address, String data) {
+    public void write(int pid, int address, String data) throws AddressingException {
         int page = address / this.pageSize;
+        this.checkAllocated(pid, page);
         int offset = address % this.pageSize;
         this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
     }
 
-    public void write(int pid, int address, int data) {
+    public void write(int pid, int address, int data) throws AddressingException {
         int page = address / this.pageSize;
+        this.checkAllocated(pid, page);
         int offset = address % this.pageSize;
         this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
     }
 
-    public void write(int pid, int address, double data) {
+    public void write(int pid, int address, double data) throws AddressingException {
         int page = address / this.pageSize;
+        this.checkAllocated(pid, page);
         int offset = address % this.pageSize;
         this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
     }
 
-    public void write(int pid, int address, boolean data) {
+    public void write(int pid, int address, boolean data) throws AddressingException {
         int page = address / this.pageSize;
+        this.checkAllocated(pid, page);
         int offset = address % this.pageSize;
         this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
     }
