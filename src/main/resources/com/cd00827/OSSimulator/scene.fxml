@@ -3,13 +3,39 @@
 <?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.text.Text?>
-<GridPane maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="400.0"
-          prefWidth="600.0" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1"
-          fx:controller="com.cd00827.OSSimulator.FXMLController" hgap="10" vgap="10">
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.HBox?>
+<BorderPane maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="400.0"
+            prefWidth="600.0" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.cd00827.OSSimulator.FXMLController">
 
-    <Text text="Input files" GridPane.columnIndex="0" GridPane.rowIndex="0"></Text>
-    <ListView GridPane.columnIndex="0" GridPane.rowIndex="1" GridPane.columnSpan="2" GridPane.rowSpan="2" fx:id="input"></ListView>
-    <Button fx:id="add" text="Add" GridPane.columnIndex="0" GridPane.rowIndex="3"></Button>
-    <Button fx:id="remove" text="Remove" GridPane.columnIndex="1" GridPane.rowIndex="3"></Button>
 
-</GridPane>
+    <left>
+        <VBox>
+            <Text text="Input files"></Text>
+            <ListView fx:id="input"></ListView>
+            <HBox>
+                <Button fx:id="add" text="Add"></Button>
+                <Button fx:id="remove" text="Remove"></Button>
+                <Button fx:id="execute" text="Execute"></Button>
+            </HBox>
+        </VBox>
+    </left>
+
+    <bottom>
+        <VBox>
+            <Text text="Output"></Text>
+            <ListView maxHeight="150" prefHeight="150" prefWidth="500" fx:id="output"></ListView>
+        </VBox>
+    </bottom>
+
+    <right>
+        <VBox>
+            <Text text="Execution trace"></Text>
+            <ListView fx:id="execTrace"></ListView>
+            <Button fx:id="clear" text="Clear"></Button>
+        </VBox>
+    </right>
+
+</BorderPane>
