@@ -15,26 +15,43 @@ public class MMU {
         this.pageTable = new HashMap<Integer, Map<Integer, Integer>>();
     }
 
-    public Address read(PCB pcb, int address) {
+    public Address read(int pid, int address) {
         int page = address / this.pageSize;
         int offset = address % this.pageSize;
-        return this.ram[pageTable.get(pcb.getPid()).get(page) + offset];
+        return this.ram[this.pageTable.get(pid).get(page) + offset];
     }
 
-    public void write(PCB pcb, int address, String data) {
-
+    private boolean isAllocated(int pid, int page) {
+        if (this.pageTable.get(pid).containsKey(page)) {
+            return true;
+        }
+        else {
+            return false;
+        }
     }
 
-    public void write(PCB pcb, int address, String data) {
-
+    public void write(int pid, int address, String data) {
+        int page = address / this.pageSize;
+        int offset = address % this.pageSize;
+        this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
     }
 
-    public void write(PCB pcb, int address, String data) {
-
+    public void write(int pid, int address, int data) {
+        int page = address / this.pageSize;
+        int offset = address % this.pageSize;
+        this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
     }
 
-    public void write(PCB pcb, int address, String data) {
+    public void write(int pid, int address, double data) {
+        int page = address / this.pageSize;
+        int offset = address % this.pageSize;
+        this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
+    }
 
+    public void write(int pid, int address, boolean data) {
+        int page = address / this.pageSize;
+        int offset = address % this.pageSize;
+        this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
     }
 
     public void allocate(PCB pcb, int blocks) {
