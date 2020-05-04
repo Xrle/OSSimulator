@@ -135,12 +135,28 @@ public class MMU {
         }
     }
 
-    public void free(int pid, int blocks) {
+    public void free(int pid, int blocks) throws AddressingException {
+        int pages = (int)Math.ceil((double)blocks / this.pageSize);
 
+        //Check that process has enough pages allocated
+        if (this.pageTable.get(pid) == null) {
+            throw new AddressingException("PID "+ pid +" attempted to free more memory than it has allocated");
+        }
+        else if (this.pageTable.get(pid).size() < pages) {
+            throw new AddressingException("PID "+ pid +" attempted to free more memory than it has allocated");
+        }
+
+        //Free pages from most to least recently allocated
+        int size = this.pageTable.get(pid).size();
+        for (int i = 1; i <= pages; i++) {
+            this.frameAllocationRecord.put(this.pageTable.get(pid).get(size - i), false);
+            this.pageTable.get(pid).remove(size - i);
+        }
     }
 
-    public void flushProcess(int pid) {
-
+    public void flushProcess(int pid) throws AddressingException {
+        int blocks = this.pageTable.get(pid).size() * this.pageSize;
+        this.free(pid, blocks);
     }
 
     public void swapOut(PCB pcb) {

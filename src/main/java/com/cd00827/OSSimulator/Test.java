@@ -10,7 +10,8 @@ public class Test {
             mmu.write(2, 3, true);
             mmu.allocate(1, 5);
             mmu.write(1, 13, 1.8);
-            mmu.allocate(3,26);
+            mmu.flushProcess(1);
+            mmu.flushProcess(1);
         } catch (AddressingException e) {
             e.printStackTrace();
         }
