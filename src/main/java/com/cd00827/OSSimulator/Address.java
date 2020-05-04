@@ -1,8 +1,8 @@
 package com.cd00827.OSSimulator;
 
 public class Address {
-    private enum Type {STRING, INT, DOUBLE, BOOL};
-    private Type type;
+    private enum Type {STRING, INT, DOUBLE, BOOL}
+    private final Type type;
     private String stringData;
     private int intData;
     private double doubleData;
@@ -54,5 +54,28 @@ public class Address {
             throw new AddressingException("Address does not contain a boolean type");
         }
         return this.booleanData;
+    }
+
+    @Override
+    public String toString() {
+        String data = null;
+        switch (this.type) {
+            case STRING:
+                data = this.stringData;
+                break;
+
+            case INT:
+                data = String.valueOf(this.intData);
+                break;
+
+            case DOUBLE:
+                data = String.valueOf(this.doubleData);
+                break;
+
+            case BOOL:
+                data = String.valueOf(this.booleanData);
+                break;
+        }
+        return this.type + "::" + data;
     }
 }

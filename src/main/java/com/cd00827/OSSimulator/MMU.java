@@ -1,7 +1,12 @@
 package com.cd00827.OSSimulator;
 
+import com.sun.jdi.event.ExceptionEvent;
+
+import java.io.*;
+import java.nio.file.Files;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.Stream;
 
 public class MMU {
     private final Address[] ram;
@@ -109,7 +114,7 @@ public class MMU {
             }
         }
         if (freePages < pages) {
-            //TODO: Swap out processes
+            throw new AddressingException("Not enough free memory to complete allocation request for PID " + pid);
         }
 
         //Allocate pages
@@ -159,11 +164,69 @@ public class MMU {
         this.free(pid, blocks);
     }
 
-    public void swapOut(PCB pcb) {
-
+    public void swapOut(int pid) throws AddressingException {
+        File dir = new File("swap");
+        File file = new File("swap", pid + ".txt");
+        try {
+            if (!dir.exists()) {
+                Files.createDirectory(dir.toPath());
+            }
+            Files.deleteIfExists(file.toPath());
+            BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+            for (Map.Entry<Integer, Integer> page : this.pageTable.get(pid).entrySet()) {
+                for (int i = 0; i < this.pageSize; i++) {
+                    if (this.ram[page.getValue() + i] != null) {
+                        writer.write(this.ram[page.getValue() + i].toString());
+                    }
+                    writer.newLine();
+                }
+            }
+            writer.close();
+            this.flushProcess(pid);
+        }
+        catch (Exception e){
+            throw new AddressingException("An error occurred swapping out PID " + pid + ": " + e.getMessage());
+        }
     }
 
-    public void swapIn(PCB pcb) {
+    public void swapIn(int pid) throws AddressingException {
+        File file = new File("swap", pid + ".txt");
+        try {
+            //Get required memory
+            Stream<String> stream = Files.lines(file.toPath());
+            int blocks = (int)stream.count();
+            stream.close();
+            this.allocate(pid, blocks);
 
+            //Load data into memory
+            BufferedReader reader = new BufferedReader(new FileReader(file));
+            for (int i = 0; i < blocks; i++) {
+                String line = reader.readLine();
+                if (!line.trim().isEmpty()) {
+                    String[] split = line.split("::", 2);
+                    switch (split[0]) {
+                        case "STRING":
+                            this.write(pid, i, split[1]);
+                            break;
+
+                        case "INT":
+                            this.write(pid, i, Integer.parseInt(split[1]));
+                            break;
+
+                        case "DOUBLE":
+                            this.write(pid, i, Double.parseDouble(split[1]));
+                            break;
+
+                        case "BOOL":
+                            this.write(pid, i, Boolean.parseBoolean(split[1]));
+                            break;
+                    }
+                }
+            }
+            reader.close();
+        }
+        catch (Exception e) {
+            throw new AddressingException("An error occurred swapping in PID " + pid + ": " + e.getMessage());
+        }
     }
 }
