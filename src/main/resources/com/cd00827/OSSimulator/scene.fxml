@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.text.Text?>
@@ -13,28 +12,28 @@
 
     <left>
         <VBox>
-            <Text text="Input files"></Text>
-            <ListView fx:id="input"></ListView>
+            <Text text="Input files"/>
+            <ListView fx:id="input"/>
             <HBox>
-                <Button fx:id="add" text="Add"></Button>
-                <Button fx:id="remove" text="Remove"></Button>
-                <Button fx:id="execute" text="Execute"></Button>
+                <Button fx:id="add" text="Add"/>
+                <Button fx:id="remove" text="Remove"/>
+                <Button fx:id="execute" text="Execute"/>
             </HBox>
         </VBox>
     </left>
 
     <bottom>
         <VBox>
-            <Text text="Output"></Text>
-            <ListView maxHeight="150" prefHeight="150" prefWidth="500" fx:id="output"></ListView>
+            <Text text="Output"/>
+            <ListView maxHeight="150" prefHeight="150" prefWidth="500" fx:id="output"/>
         </VBox>
     </bottom>
 
     <right>
         <VBox>
-            <Text text="Execution trace"></Text>
-            <ListView fx:id="execTrace"></ListView>
-            <Button fx:id="clear" text="Clear"></Button>
+            <Text text="Execution trace"/>
+            <ListView fx:id="execTrace"/>
+            <Button fx:id="clear" text="Clear"/>
         </VBox>
     </right>
 
