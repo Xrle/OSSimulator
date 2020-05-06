@@ -1,14 +1,13 @@
 package com.cd00827.OSSimulator;
 
-import com.sun.jdi.event.ExceptionEvent;
-
 import java.io.*;
 import java.nio.file.Files;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Stream;
 
-public class MMU {
+public class MMU implements Runnable {
+    private static final String MAILBOX_LABEL = "MMU";
     private final Address[] ram;
     private final int pageSize;
     private final int pageNumber;
@@ -16,15 +15,39 @@ public class MMU {
     private final Map<Integer, Map<Integer, Integer>> pageTable;
     //Keep a record of allocated frames
     private final Map<Integer, Boolean> frameAllocationRecord;
+    private Mailbox mailbox;
+    private final double clockSpeed;
 
-    public MMU(int pageSize, int pageNumber) {
+    public MMU(int pageSize, int pageNumber, double clockSpeed, Mailbox mailbox) {
         this.ram = new Address[pageSize * pageNumber];
         this.pageSize = pageSize;
         this.pageNumber = pageNumber;
+        this.clockSpeed = clockSpeed;
         this.pageTable = new TreeMap<>();
         this.frameAllocationRecord = new TreeMap<>();
         for (int page = 0; page < pageNumber; page++) {
             frameAllocationRecord.put(page * pageSize, false);
+        }
+    }
+
+    @Override
+    public void run() {
+        while (true) {
+            //Get next command
+            Message message = this.mailbox.get(MAILBOX_LABEL);
+            String[] command = message.getCommand();
+            switch (command[0]) {
+                //allocate [pid] [swap order separated by :]
+                case "":
+            }
+
+            //Wait for next clock cycle
+            try {
+                Thread.sleep((long) (clockSpeed / 1000));
+            }
+            catch (InterruptedException e) {
+                return;
+            }
         }
     }
 
