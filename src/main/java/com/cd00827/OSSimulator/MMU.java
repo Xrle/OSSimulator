@@ -2,12 +2,12 @@ package com.cd00827.OSSimulator;
 
 import java.io.*;
 import java.nio.file.Files;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class MMU implements Runnable {
-    private static final String MAILBOX_LABEL = "MMU";
     private final Address[] ram;
     private final int pageSize;
     private final int pageNumber;
@@ -34,11 +34,52 @@ public class MMU implements Runnable {
     public void run() {
         while (true) {
             //Get next command
-            Message message = this.mailbox.get(MAILBOX_LABEL);
+            Message message = this.mailbox.get(Mailbox.MMU);
             String[] command = message.getCommand();
             switch (command[0]) {
-                //allocate [pid] [swap order separated by :]
-                case "":
+
+                //allocate [pid] [blocks] [swap order separated by :]
+                case "allocate":
+                    int pid = Integer.parseInt(command[1]);
+                    int blocks = Integer.parseInt(command[2]);
+                    //Parse swap order
+                    LinkedList<Integer> swapOrder = Pattern.compile(":")
+                            .splitAsStream(command[3]).map(Integer::valueOf)
+                            .collect(Collectors.toCollection(LinkedList::new));
+                    boolean done = false;
+
+                    //Allocate memory
+                    while (!done) {
+                        switch (this.allocate(pid, blocks)) {
+                            //Success, mark process as loaded
+                            case 1:
+                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "loaded " + pid);
+                                done = true;
+                                break;
+
+                            //Must free up memory and try again
+                            case -1:
+                                Integer process = swapOrder.poll();
+                                if (process == null) {
+                                    //There is enough memory in the system, but no processes are available to swap
+                                    //Therefore do nothing, scheduler shouldn't mark an unloaded process for execution
+                                    done = true;
+                                }
+                                else {
+                                    this.swapOut(process);
+                                }
+                                break;
+
+                            //Not enough total system memory - drop the process
+                            case -2:
+                                this.flushProcess(pid);
+                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
+                                //Break out of loop as nothing more can be done
+                                done = true;
+                                break;
+                        }
+                    }
+                    break;
             }
 
             //Wait for next clock cycle
@@ -113,7 +154,15 @@ public class MMU implements Runnable {
         this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
     }
 
-    public void allocate(int pid, int blocks) throws AddressingException {
+    /**
+     * Allocate memory to a process
+     * @param pid PID of process
+     * @param blocks Number of blocks to allocate
+     * @return 1: Success<br>
+     * -1: Not enough free memory<br>
+     * -2: Tried to allocate more memory than available to the system<br>
+     */
+    public int allocate(int pid, int blocks) {
         int pages = (int)Math.ceil((double)blocks / this.pageSize);
         int freePages = 0;
         int currentPages = 0;
@@ -127,7 +176,7 @@ public class MMU implements Runnable {
 
         //Check that the system has enough memory
         if (pages + currentPages > this.pageNumber) {
-            throw new AddressingException("PID " + pid + " attempted to allocate more memory than available to the system");
+            return -1;
         }
 
         //Check that there are enough free pages, swap out other processes if not
@@ -137,7 +186,7 @@ public class MMU implements Runnable {
             }
         }
         if (freePages < pages) {
-            throw new AddressingException("Not enough free memory to complete allocation request for PID " + pid);
+            return -2;
         }
 
         //Allocate pages
@@ -161,17 +210,25 @@ public class MMU implements Runnable {
                 }
             }
         }
+        return 1;
     }
 
-    public void free(int pid, int blocks) throws AddressingException {
+    /**
+     * Free a process's memory
+     * @param pid PID of process
+     * @param blocks Number of blocks to free
+     * @return 1: Success<br>
+     *     -1: Attempted to free more memory than allocated<br>
+     */
+    public int free(int pid, int blocks) {
         int pages = (int)Math.ceil((double)blocks / this.pageSize);
 
         //Check that process has enough pages allocated
         if (this.pageTable.get(pid) == null) {
-            throw new AddressingException("PID "+ pid +" attempted to free more memory than it has allocated");
+            return -1;
         }
         else if (this.pageTable.get(pid).size() < pages) {
-            throw new AddressingException("PID "+ pid +" attempted to free more memory than it has allocated");
+            return -1;
         }
 
         //Free pages from most to least recently allocated
@@ -180,14 +237,22 @@ public class MMU implements Runnable {
             this.frameAllocationRecord.put(this.pageTable.get(pid).get(size - i), false);
             this.pageTable.get(pid).remove(size - i);
         }
+        return 1;
     }
 
-    public void flushProcess(int pid) throws AddressingException {
+    public void flushProcess(int pid) {
         int blocks = this.pageTable.get(pid).size() * this.pageSize;
+        //No error handling should be needed as method calculates memory to free using page table
         this.free(pid, blocks);
     }
 
-    public void swapOut(int pid) throws AddressingException {
+    /**
+     * Swap a process's memory out to a file.<br>
+     * Will throw a RuntimeException if swapping fails, as an inability to swap will prevent the simulator from
+     * functioning correctly.
+     * @param pid PID of process to swap out
+     */
+    public void swapOut(int pid) {
         File dir = new File("swap");
         File file = new File("swap", pid + ".txt");
         try {
@@ -208,7 +273,8 @@ public class MMU implements Runnable {
             this.flushProcess(pid);
         }
         catch (Exception e){
-            throw new AddressingException("An error occurred swapping out PID " + pid + ": " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("FATAL: Swapping out PID " + pid + " failed, check you have r/w access to /swap");
         }
     }
 

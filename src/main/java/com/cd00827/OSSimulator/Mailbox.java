@@ -4,6 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Mailbox {
+    //Predefined mailbox labels
+    public static final String MMU = "MMU";
+    public static final String SCHEDULER = "SCHEDULER";
+
     public List<Message> queue;
 
     public Mailbox() {
