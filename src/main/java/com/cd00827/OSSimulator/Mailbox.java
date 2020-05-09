@@ -15,18 +15,21 @@ public class Mailbox {
     }
 
     synchronized void put(String sender, String target, String command) {
-        this.queue.add(new Message(sender, target, command));
+        Message message = new Message(sender, target, command);
+        this.queue.add(message);
+        System.out.println("Produced: " + message.toString());
     }
 
     synchronized Message get(String target) {
-        Message msg = null;
+        Message message = null;
         for (Message i : this.queue) {
             if (i.getTarget().equals(target)) {
-                msg = i;
+                message = i;
                 this.queue.remove(i);
+                System.out.println("Consumed: " + message.toString());
                 break;
             }
         }
-        return msg;
+        return message;
     }
 }

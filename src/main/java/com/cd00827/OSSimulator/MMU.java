@@ -1,6 +1,7 @@
 package com.cd00827.OSSimulator;
 
 import java.io.*;
+import java.lang.reflect.Array;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -23,6 +24,7 @@ public class MMU implements Runnable {
         this.pageSize = pageSize;
         this.pageNumber = pageNumber;
         this.clockSpeed = clockSpeed;
+        this.mailbox = mailbox;
         this.pageTable = new TreeMap<>();
         this.frameAllocationRecord = new TreeMap<>();
         for (int page = 0; page < pageNumber; page++) {
@@ -35,51 +37,73 @@ public class MMU implements Runnable {
         while (true) {
             //Get next command
             Message message = this.mailbox.get(Mailbox.MMU);
-            String[] command = message.getCommand();
-            switch (command[0]) {
+            if (message != null) {
+                String[] command = message.getCommand();
+                switch (command[0]) {
 
-                //allocate [pid] [blocks] [swap order separated by :]
-                case "allocate":
-                    int pid = Integer.parseInt(command[1]);
-                    int blocks = Integer.parseInt(command[2]);
-                    //Parse swap order
-                    LinkedList<Integer> swapOrder = Pattern.compile(":")
-                            .splitAsStream(command[3]).map(Integer::valueOf)
-                            .collect(Collectors.toCollection(LinkedList::new));
-                    boolean done = false;
+                    //allocate [pid] [blocks] [swap order separated by :]
+                    case "allocate": {
+                        int pid = Integer.parseInt(command[1]);
+                        int blocks = Integer.parseInt(command[2]);
 
-                    //Allocate memory
-                    while (!done) {
-                        switch (this.allocate(pid, blocks)) {
-                            //Success, mark process as loaded
-                            case 1:
-                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "loaded " + pid);
-                                done = true;
-                                break;
+                        //Parse swap order
+                        LinkedList<Integer> swapOrder;
+                        try {
+                            swapOrder = Pattern.compile(":")
+                                    .splitAsStream(command[3]).map(Integer::valueOf)
+                                    .collect(Collectors.toCollection(LinkedList::new));
+                        }
+                        //If no swap order is provided, catch the exception and initialise an empty list
+                        catch (ArrayIndexOutOfBoundsException e) {
+                            swapOrder = new LinkedList<>();
+                        }
+                        boolean done = false;
 
-                            //Must free up memory and try again
-                            case -1:
-                                Integer process = swapOrder.poll();
-                                if (process == null) {
-                                    //There is enough memory in the system, but no processes are available to swap
-                                    //Therefore do nothing, scheduler shouldn't mark an unloaded process for execution
+                        //Allocate memory
+                        while (!done) {
+                            switch (this.allocate(pid, blocks)) {
+                                //Success, unblock process
+                                case 1:
+                                    this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
                                     done = true;
-                                }
-                                else {
-                                    this.swapOut(process);
-                                }
-                                break;
+                                    break;
 
-                            //Not enough total system memory - drop the process
-                            case -2:
-                                this.flushProcess(pid);
-                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
-                                //Break out of loop as nothing more can be done
-                                done = true;
-                                break;
+                                //Must free up memory and try again
+                                case -1:
+                                    Integer process = swapOrder.poll();
+                                    if (process == null) {
+                                        //There is enough memory in the system, but no processes are available to swap
+                                        //Therefore do nothing, scheduler shouldn't mark a blocked process for execution
+                                        done = true;
+                                    } else {
+                                        this.swapOut(process);
+                                    }
+                                    break;
+
+                                //Not enough total system memory - drop the process
+                                case -2:
+                                    this.flushProcess(pid);
+                                    this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
+                                    //Break out of loop as nothing more can be done
+                                    done = true;
+                                    break;
+                            }
                         }
                     }
                     break;
+
+                    //free [pid] [blocks]
+                    case "free": {
+                        int pid = Integer.parseInt(command[1]);
+                        int blocks = Integer.parseInt(command[2]);
+
+                        if (this.free(pid, blocks) < 0) {
+                            //Process has caused an error, so drop it
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
+                        }
+                    }
+                    break;
+                }
             }
 
             //Wait for next clock cycle
@@ -176,17 +200,17 @@ public class MMU implements Runnable {
 
         //Check that the system has enough memory
         if (pages + currentPages > this.pageNumber) {
-            return -1;
+            return -2;
         }
 
-        //Check that there are enough free pages, swap out other processes if not
+        //Check that there is enough free memory
         for (Map.Entry<Integer, Boolean> entry : this.frameAllocationRecord.entrySet()) {
             if (!entry.getValue()) {
                 freePages++;
             }
         }
         if (freePages < pages) {
-            return -2;
+            return -1;
         }
 
         //Allocate pages

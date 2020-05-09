@@ -22,4 +22,9 @@ public class Message {
     public String[] getCommand() {
         return this.command.split("\\s");
     }
+
+    @Override
+    public String toString() {
+        return "[" + this.sender + " => " + this.target + "] " + this.command;
+    }
 }

@@ -11,5 +11,19 @@ public class Kernel {
 
     public void boot() {
         this.mmu.start();
+        try {
+            Thread.sleep(1500);
+            mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "allocate 1 5");
+            Thread.sleep(1500);
+            mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "allocate 2 20 ");
+            Thread.sleep(1500);
+            mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "allocate 1 15 2");
+            Thread.sleep(1500);
+            this.mmu.join();
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+
     }
 }
