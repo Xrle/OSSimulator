@@ -8,6 +8,24 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Memory management unit.<br>
+ * Maintains an array representing physical RAM, and allocates memory to processes using a paging system.
+ * Allows for processes to be swapped out to text files when memory is full.
+ * Provides read and write access to memory.<br>
+ * Produces:<br>
+ *     SCHEDULER => unblock [pid]<br>
+ *     SCHEDULER => swappedOut [pid]<br>
+ *     SCHEDULER => swappedIn [pid]<br>
+ *     SCHEDULER => skip [pid]<br>
+ *     SCHEDULER => drop [pid]<br>
+ *
+ * Consumes:<br>
+ *     MMU => allocate [pid] [blocks] [swap order x:y:x]<br>
+ *     MMU => free [pid] [blocks]<br>
+ *
+ * @author cd00827
+ */
 public class MMU implements Runnable {
     private final Address[] ram;
     private final int pageSize;
@@ -16,7 +34,7 @@ public class MMU implements Runnable {
     private final Map<Integer, Map<Integer, Integer>> pageTable;
     //Keep a record of allocated frames
     private final Map<Integer, Boolean> frameAllocationRecord;
-    private Mailbox mailbox;
+    private final Mailbox mailbox;
     private final double clockSpeed;
 
     public MMU(int pageSize, int pageNumber, double clockSpeed, Mailbox mailbox) {
@@ -41,7 +59,7 @@ public class MMU implements Runnable {
                 String[] command = message.getCommand();
                 switch (command[0]) {
 
-                    //allocate [pid] [blocks] [swap order separated by :]
+                    //allocate [pid] [blocks] [swap order x:y:z]
                     case "allocate": {
                         int pid = Integer.parseInt(command[1]);
                         int blocks = Integer.parseInt(command[2]);
@@ -73,10 +91,13 @@ public class MMU implements Runnable {
                                     Integer process = swapOrder.poll();
                                     if (process == null) {
                                         //There is enough memory in the system, but no processes are available to swap
-                                        //Therefore do nothing, scheduler shouldn't mark a blocked process for execution
+                                        //Tell scheduler to skip this process
+                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "skip " + pid);
                                         done = true;
                                     } else {
+                                        //Swap out process and notify scheduler
                                         this.swapOut(process);
+                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedOut " + pid);
                                     }
                                     break;
 
@@ -101,6 +122,32 @@ public class MMU implements Runnable {
                             //Process has caused an error, so drop it
                             this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
                         }
+                    }
+                    break;
+
+                    //swapIn [pid]
+                    case "swapIn": {
+                        int pid = Integer.parseInt(command[1]);
+                        //If there is enough memory to swap in process, do it and notify scheduler.
+                        //Otherwise tell scheduler to skip this process
+                        if (this.swapIn(pid) > 0) {
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedOut " + pid);
+                        }
+                        else {
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "skip " + pid);
+                        }
+                    }
+                    break;
+
+                    //read [pid] [address]
+                    case "read": {
+                        //TODO refactor address to store TYPE:data
+                    }
+                    break;
+
+                    //write [pid] [address] [type] [data]
+                    case "write": {
+
                     }
                     break;
                 }
@@ -302,14 +349,19 @@ public class MMU implements Runnable {
         }
     }
 
-    public void swapIn(int pid) throws AddressingException {
+    public int swapIn(int pid) {
         File file = new File("swap", pid + ".txt");
         try {
             //Get required memory
             Stream<String> stream = Files.lines(file.toPath());
             int blocks = (int)stream.count();
             stream.close();
-            this.allocate(pid, blocks);
+            if (this.allocate(pid, blocks) < 0) {
+                //Failed to allocate enough memory.
+                //Case where there is not enough total system memory can be ignored, as if that was the case
+                //the process would never have existed in memory to be swapped out.
+                return -1;
+            }
 
             //Load data into memory
             BufferedReader reader = new BufferedReader(new FileReader(file));
@@ -338,8 +390,9 @@ public class MMU implements Runnable {
             }
             reader.close();
         }
-        catch (Exception e) {
-            throw new AddressingException("An error occurred swapping in PID " + pid + ": " + e.getMessage());
+        catch (IOException e) {
+            throw new RuntimeException("FATAL: Swapping in PID " + pid + " failed, check you have r/w access to /swap");
         }
+        return 1;
     }
 }
