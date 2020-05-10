@@ -118,7 +118,7 @@ public class MMU implements Runnable {
                         int pid = Integer.parseInt(command[1]);
                         int blocks = Integer.parseInt(command[2]);
 
-                        if (this.free(pid, blocks) < 0) {
+                        if (!this.free(pid, blocks)) {
                             //Process has caused an error, so drop it
                             this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
                         }
@@ -130,7 +130,7 @@ public class MMU implements Runnable {
                         int pid = Integer.parseInt(command[1]);
                         //If there is enough memory to swap in process, do it and notify scheduler.
                         //Otherwise tell scheduler to skip this process
-                        if (this.swapIn(pid) > 0) {
+                        if (this.swapIn(pid)) {
                             this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedOut " + pid);
                         }
                         else {
@@ -163,66 +163,23 @@ public class MMU implements Runnable {
         }
     }
 
-    private void checkAllocated(int pid, int page) throws AddressingException {
-        if (!this.pageTable.get(pid).containsKey(page)) {
-            throw new AddressingException("PID " + pid + " attempted to access memory it hasn't been allocated");
+    public String[] read(int pid, int address) {
+        int page = address / this.pageSize;
+        int offset = address % this.pageSize;
+        if (this.pageTable.get(pid).containsKey(page)) {
+            return this.ram[this.pageTable.get(pid).get(page) + offset].read();
         }
+        return null;
     }
 
-    public String readString(int pid, int address) throws AddressingException {
+    public boolean write(int pid, int address, String type, String data) {
         int page = address / this.pageSize;
-        this.checkAllocated(pid, page);
         int offset = address % this.pageSize;
-        return this.ram[this.pageTable.get(pid).get(page) + offset].readString();
-    }
-
-    public int readInt(int pid, int address) throws AddressingException {
-        int page = address / this.pageSize;
-        this.checkAllocated(pid, page);
-        int offset = address % this.pageSize;
-        return this.ram[this.pageTable.get(pid).get(page) + offset].readInt();
-    }
-
-    public double readDouble(int pid, int address) throws AddressingException {
-        int page = address / this.pageSize;
-        this.checkAllocated(pid, page);
-        int offset = address % this.pageSize;
-        return this.ram[this.pageTable.get(pid).get(page) + offset].readDouble();
-    }
-
-    public boolean readBool(int pid, int address) throws AddressingException {
-        int page = address / this.pageSize;
-        this.checkAllocated(pid, page);
-        int offset = address % this.pageSize;
-        return this.ram[this.pageTable.get(pid).get(page) + offset].readBool();
-    }
-
-    public void write(int pid, int address, String data) throws AddressingException {
-        int page = address / this.pageSize;
-        this.checkAllocated(pid, page);
-        int offset = address % this.pageSize;
-        this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
-    }
-
-    public void write(int pid, int address, int data) throws AddressingException {
-        int page = address / this.pageSize;
-        this.checkAllocated(pid, page);
-        int offset = address % this.pageSize;
-        this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
-    }
-
-    public void write(int pid, int address, double data) throws AddressingException {
-        int page = address / this.pageSize;
-        this.checkAllocated(pid, page);
-        int offset = address % this.pageSize;
-        this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
-    }
-
-    public void write(int pid, int address, boolean data) throws AddressingException {
-        int page = address / this.pageSize;
-        this.checkAllocated(pid, page);
-        int offset = address % this.pageSize;
-        this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(data);
+        if (this.pageTable.get(pid).containsKey(page)) {
+            this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(type, data);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -288,18 +245,18 @@ public class MMU implements Runnable {
      * Free a process's memory
      * @param pid PID of process
      * @param blocks Number of blocks to free
-     * @return 1: Success<br>
-     *     -1: Attempted to free more memory than allocated<br>
+     * @return True: Success<br>
+     *     False: Attempted to free more memory than allocated<br>
      */
-    public int free(int pid, int blocks) {
+    public boolean free(int pid, int blocks) {
         int pages = (int)Math.ceil((double)blocks / this.pageSize);
 
         //Check that process has enough pages allocated
         if (this.pageTable.get(pid) == null) {
-            return -1;
+            return false;
         }
         else if (this.pageTable.get(pid).size() < pages) {
-            return -1;
+            return false;
         }
 
         //Free pages from most to least recently allocated
@@ -308,7 +265,7 @@ public class MMU implements Runnable {
             this.frameAllocationRecord.put(this.pageTable.get(pid).get(size - i), false);
             this.pageTable.get(pid).remove(size - i);
         }
-        return 1;
+        return true;
     }
 
     public void flushProcess(int pid) {
@@ -349,7 +306,15 @@ public class MMU implements Runnable {
         }
     }
 
-    public int swapIn(int pid) {
+    /**
+     * Swap a process's memory in from a file.<br>
+     * Will throw a RuntimeException if opening the swap file fails, as this will prevent the simulator from running
+     * properly and is likely caused by incorrect permissions
+     * @param pid PID of process to swap in
+     * @return True: Success<br>
+     *     False: Could not allocate enough memory<br>
+     */
+    public boolean swapIn(int pid) {
         File file = new File("swap", pid + ".txt");
         try {
             //Get required memory
@@ -360,7 +325,7 @@ public class MMU implements Runnable {
                 //Failed to allocate enough memory.
                 //Case where there is not enough total system memory can be ignored, as if that was the case
                 //the process would never have existed in memory to be swapped out.
-                return -1;
+                return false;
             }
 
             //Load data into memory
@@ -369,23 +334,7 @@ public class MMU implements Runnable {
                 String line = reader.readLine();
                 if (!line.trim().isEmpty()) {
                     String[] split = line.split("::", 2);
-                    switch (split[0]) {
-                        case "STRING":
-                            this.write(pid, i, split[1]);
-                            break;
-
-                        case "INT":
-                            this.write(pid, i, Integer.parseInt(split[1]));
-                            break;
-
-                        case "DOUBLE":
-                            this.write(pid, i, Double.parseDouble(split[1]));
-                            break;
-
-                        case "BOOL":
-                            this.write(pid, i, Boolean.parseBoolean(split[1]));
-                            break;
-                    }
+                    this.write(pid, i, split[0], split[1]);
                 }
             }
             reader.close();
@@ -393,6 +342,6 @@ public class MMU implements Runnable {
         catch (IOException e) {
             throw new RuntimeException("FATAL: Swapping in PID " + pid + " failed, check you have r/w access to /swap");
         }
-        return 1;
+        return true;
     }
 }
