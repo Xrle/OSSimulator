@@ -1,5 +1,8 @@
 package com.cd00827.OSSimulator;
 
+import javafx.collections.ObservableList;
+import javafx.scene.control.ListView;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -7,17 +10,20 @@ public class Mailbox {
     //Predefined mailbox labels
     public static final String MMU = "MMU";
     public static final String SCHEDULER = "SCHEDULER";
+    public static final String KERNEL = "KERNEL";
 
+    private final ObservableList<Message> log;
     public List<Message> queue;
 
-    public Mailbox() {
+    public Mailbox(ObservableList<Message> log) {
+        this.log = log;
         this.queue = new ArrayList<>();
     }
 
     synchronized void put(String sender, String target, String command) {
         Message message = new Message(sender, target, command);
         this.queue.add(message);
-        System.out.println("Produced: " + message.toString());
+        this.log.add(message);
     }
 
     synchronized Message get(String target) {
@@ -26,7 +32,7 @@ public class Mailbox {
             if (i.getTarget().equals(target)) {
                 message = i;
                 this.queue.remove(i);
-                System.out.println("Consumed: " + message.toString());
+                this.log.remove(message);
                 break;
             }
         }

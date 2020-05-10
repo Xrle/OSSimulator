@@ -13,11 +13,11 @@
     <left>
         <VBox>
             <Text text="Input files"/>
-            <ListView fx:id="input"/>
+            <ListView fx:id="input" />
             <HBox>
-                <Button fx:id="add" text="Add"/>
-                <Button fx:id="remove" text="Remove"/>
-                <Button fx:id="execute" text="Execute"/>
+                <Button fx:id="add" text="Add" onAction="#addFile"/>
+                <Button fx:id="remove" text="Remove" onAction="#removeFile"/>
+                <Button fx:id="execute" text="Execute" onAction="#execute"/>
             </HBox>
         </VBox>
     </left>
@@ -30,11 +30,16 @@
     </bottom>
 
     <right>
-        <VBox>
-            <Text text="Execution trace"/>
-            <ListView fx:id="execTrace"/>
-            <Button fx:id="clear" text="Clear"/>
-        </VBox>
+        <HBox>
+            <VBox>
+                <Text text="Mailbox"/>
+                <ListView fx:id="mailboxLog"/>
+            </VBox>
+            <VBox>
+                <Text text="Execution trace"/>
+                <ListView fx:id="execTrace"/>
+            </VBox>
+        </HBox>
     </right>
 
 </BorderPane>
