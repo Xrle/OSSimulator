@@ -1,7 +1,6 @@
 package com.cd00827.OSSimulator;
 
 import java.io.*;
-import java.lang.reflect.Array;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -19,10 +18,14 @@ import java.util.stream.Stream;
  *     SCHEDULER => swappedIn [pid]<br>
  *     SCHEDULER => skip [pid]<br>
  *     SCHEDULER => drop [pid]<br>
+ *     [SENDER] => data [type] [data]<br>
  *
  * Consumes:<br>
  *     MMU => allocate [pid] [blocks] [swap order x:y:x]<br>
  *     MMU => free [pid] [blocks]<br>
+ *     MMU => read [pid] [address]<br>
+ *     MMU => write [pid] [address] [type] [data]<br>
+ *     MMU => drop [pid]<br>
  *
  * @author cd00827
  */
@@ -103,7 +106,6 @@ public class MMU implements Runnable {
 
                                 //Not enough total system memory - drop the process
                                 case -2:
-                                    this.flushProcess(pid);
                                     this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
                                     //Break out of loop as nothing more can be done
                                     done = true;
@@ -141,13 +143,39 @@ public class MMU implements Runnable {
 
                     //read [pid] [address]
                     case "read": {
-                        //TODO refactor address to store TYPE:data
+                        int pid = Integer.parseInt(command[1]);
+                        int address = Integer.parseInt(command[2]);
+                        String[] data = this.read(pid, address);
+                        //If read is successful, send data to whatever requested it, otherwise drop the process
+                        if (data[0].equals("success")) {
+                            this.mailbox.put(Mailbox.MMU, message.getSender(), "data " + data[1] + " " + data[2]);
+                        }
+                        else {
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
+                        }
                     }
                     break;
 
                     //write [pid] [address] [type] [data]
                     case "write": {
+                        int pid = Integer.parseInt(command[1]);
+                        int address = Integer.parseInt(command[2]);
+                        String type = command[3];
+                        String data = command[4];
+                        //Unblock process if write successful, drop if there's an error
+                        if (this.write(pid, address, type, data)) {
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
+                        }
+                        else {
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
+                        }
+                    }
+                    break;
 
+                    //drop [pid]
+                    case "drop": {
+                        int pid = Integer.parseInt(command[1]);
+                        this.flushProcess(pid);
                     }
                     break;
                 }
@@ -163,15 +191,39 @@ public class MMU implements Runnable {
         }
     }
 
+    /**
+     * Read from a virtual address
+     * @param pid PID of process
+     * @param address Virtual address to read
+     * @return [status, type, data]<br>
+     *     Status is either "success" or "error"
+     */
     public String[] read(int pid, int address) {
         int page = address / this.pageSize;
         int offset = address % this.pageSize;
+        //Check process has access to address
         if (this.pageTable.get(pid).containsKey(page)) {
-            return this.ram[this.pageTable.get(pid).get(page) + offset].read();
+            try {
+                //Return data
+                String[] value = this.ram[this.pageTable.get(pid).get(page) + offset].read();
+                return new String[] {"success", value[0], value[1]};
+            }
+            //Catch exception if address is null
+            catch (NullPointerException e) {
+                return new String[] {"error", "null", "null"};
+            }
         }
-        return null;
+        return new String[] {"error", "null", "null"};
     }
 
+    /**
+     * Write to virtual address
+     * @param pid PID of process
+     * @param address Virtual address to write to
+     * @param type Type of data to write
+     * @param data Data to write
+     * @return True if successful, false if process does not have access to requested address
+     */
     public boolean write(int pid, int address, String type, String data) {
         int page = address / this.pageSize;
         int offset = address % this.pageSize;
