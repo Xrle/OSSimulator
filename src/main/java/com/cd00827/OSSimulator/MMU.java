@@ -21,10 +21,10 @@ import java.util.stream.Stream;
  *     [SENDER] => data [type] [data]<br>
  *
  * Consumes:<br>
- *     MMU => allocate [pid] [blocks] [swap order x:y:x]<br>
+ *     MMU => allocate [pid] [blocks] {swap order x:y:x}<br>
  *     MMU => free [pid] [blocks]<br>
- *     MMU => read [pid] [address]<br>
- *     MMU => write [pid] [address] [type] [data]<br>
+ *     MMU => read [pid] [address] {final}<br>
+ *     MMU => write [pid] [address] [type] [data] {final}<br>
  *     MMU => drop [pid]<br>
  *
  * @author cd00827
@@ -62,21 +62,21 @@ public class MMU implements Runnable {
                 String[] command = message.getCommand();
                 switch (command[0]) {
 
-                    //allocate [pid] [blocks] [swap order x:y:z]
+                    //allocate [pid] [blocks] {swap order x:y:z}
                     case "allocate": {
                         int pid = Integer.parseInt(command[1]);
                         int blocks = Integer.parseInt(command[2]);
 
                         //Parse swap order
-                        LinkedList<Integer> swapOrder;
+                        Queue<Integer> swapOrder;
                         try {
                             swapOrder = Pattern.compile(":")
                                     .splitAsStream(command[3]).map(Integer::valueOf)
-                                    .collect(Collectors.toCollection(LinkedList::new));
+                                    .collect(Collectors.toCollection(ArrayDeque::new));
                         }
                         //If no swap order is provided, catch the exception and initialise an empty list
                         catch (ArrayIndexOutOfBoundsException e) {
-                            swapOrder = new LinkedList<>();
+                            swapOrder = new ArrayDeque<>();
                         }
                         boolean done = false;
 
@@ -141,7 +141,7 @@ public class MMU implements Runnable {
                     }
                     break;
 
-                    //read [pid] [address]
+                    //read [pid] [address] [final]
                     case "read": {
                         int pid = Integer.parseInt(command[1]);
                         int address = Integer.parseInt(command[2]);
@@ -149,22 +149,29 @@ public class MMU implements Runnable {
                         //If read is successful, send data to whatever requested it, otherwise drop the process
                         if (data[0].equals("success")) {
                             this.mailbox.put(Mailbox.MMU, message.getSender(), "data " + data[1] + " " + data[2]);
+                            //Unblock process if this was the final read operation
+                            if (Boolean.parseBoolean(command[3])) {
+                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
+                            }
                         }
+                        //Drop process if write causes an error
                         else {
                             this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
                         }
                     }
                     break;
 
-                    //write [pid] [address] [type] [data]
+                    //write [pid] [address] [type] [data] [final]
                     case "write": {
                         int pid = Integer.parseInt(command[1]);
                         int address = Integer.parseInt(command[2]);
                         String type = command[3];
                         String data = command[4];
-                        //Unblock process if write successful, drop if there's an error
                         if (this.write(pid, address, type, data)) {
-                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
+                            //Unblock process if this was the final write operation
+                            if (Boolean.parseBoolean(command[5])) {
+                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
+                            }
                         }
                         else {
                             this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
