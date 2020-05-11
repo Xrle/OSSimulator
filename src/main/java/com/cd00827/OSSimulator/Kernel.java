@@ -33,6 +33,7 @@ public class Kernel implements Initializable {
     private Stage stage;
     private Mailbox mailbox;
     private Thread mmu;
+    private Thread scheduler;
     private boolean booted = false;
     private FileChooser fileChooser;
 
@@ -85,11 +86,17 @@ public class Kernel implements Initializable {
     private void boot() {
         int pageSize = 0;
         int pageNumber = 0;
-        int memoryClock = 0;
+        double memoryClock = 0;
 
         this.mmu = new Thread(new MMU(pageSize, pageNumber, memoryClock, this.mailbox));
         this.mmu.start();
-        this.output.getItems().add("Started MMU with " + pageNumber + " " + pageSize + " block pages (" + pageNumber*pageSize + " blocks physical RAM) at clock speed " + memoryClock + "ops/s");
+        this.output.getItems().add("[KERNEL] Started MMU with " + pageNumber + " " + pageSize + " block pages (" + pageNumber*pageSize + " blocks physical RAM) at clock speed " + memoryClock + "ops/s");
+
+        double schedulerClock = 0;
+        int quantum = 0;
+
+        this.scheduler = new Thread(new Scheduler(schedulerClock, this.mailbox, quantum));
+        this.output.getItems().add("[KERNEL] Started scheduler with quantum " + quantum + " at " + schedulerClock + "op/s");
         this.booted = true;
     }
 
@@ -100,6 +107,7 @@ public class Kernel implements Initializable {
     public void shutdown() {
         if (this.booted) {
             this.mmu.interrupt();
+            this.scheduler.interrupt();
         }
     }
 }

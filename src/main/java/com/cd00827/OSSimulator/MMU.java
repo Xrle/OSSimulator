@@ -190,7 +190,7 @@ public class MMU implements Runnable {
 
             //Wait for next clock cycle
             try {
-                Thread.sleep((long) (clockSpeed / 1000));
+                Thread.sleep((long)(clockSpeed * 1000));
             }
             catch (InterruptedException e) {
                 return;

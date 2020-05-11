@@ -10,10 +10,10 @@ public class Scheduler implements Runnable {
     private Queue<PCB> blockedQueue;
     private Queue<PCB> swapQueue;
     private Mailbox mailbox;
-    private int clockSpeed;
+    private double clockSpeed;
     private int quantum;
 
-    public Scheduler(int clockSpeed, Mailbox mailbox, int quantum) {
+    public Scheduler(double clockSpeed, Mailbox mailbox, int quantum) {
         this.clockSpeed = clockSpeed;
         this.mailbox = mailbox;
         this.quantum = quantum;
@@ -25,6 +25,16 @@ public class Scheduler implements Runnable {
 
     @Override
     public void run() {
+        while (true) {
+            //Get next command
 
+            //Wait for next clock cycle
+            try {
+                Thread.sleep((long)(clockSpeed * 1000));
+            }
+            catch (InterruptedException e) {
+                return;
+            }
+        }
     }
 }
