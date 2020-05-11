@@ -38,10 +38,30 @@ public class Scheduler implements Runnable {
             }
             //If there's a running process, decrement it's quantum and switch process if needed
             if (this.running != null) {
+                //Decrement quantum
                 if(this.running.decrement()) {
+                    //Send previous to back of queue
                     this.mainQueue.add(this.running);
+                    //Check priority queue has a process
                     if (!this.priorityQueue.isEmpty()) {
-                        this.running = this.priorityQueue.poll();
+                        PCB process = this.priorityQueue.poll();
+                        //Check process has been loaded from it's file
+                        if (process.isLoaded()) {
+                            //Check process is not swapped out
+                            if (!process.isSwapped()) {
+                                this.running = process;
+                            }
+                            //Swap in process
+                            else {
+                                this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "swapIn " + process.getPid());
+                                this.priorityQueue.remove(process);
+                                this.swapQueue.add(process);
+                            }
+                        }
+                        //Load process file
+                        else {
+
+                        }
                     }
                 }
             }

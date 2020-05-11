@@ -23,6 +23,7 @@ import java.util.stream.Stream;
  * Consumes:<br>
  *     MMU => allocate [pid] [blocks] {swap order x:y:x}<br>
  *     MMU => free [pid] [blocks]<br>
+ *     MMU => swapIn [pid]<br>
  *     MMU => read [pid] [address] [final]<br>
  *     MMU => write [pid] [address] [type] [data] [final]<br>
  *     MMU => drop [pid]<br>
