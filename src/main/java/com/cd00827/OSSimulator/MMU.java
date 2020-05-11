@@ -18,13 +18,13 @@ import java.util.stream.Stream;
  *     SCHEDULER => swappedIn [pid]<br>
  *     SCHEDULER => skip [pid]<br>
  *     SCHEDULER => drop [pid]<br>
- *     [SENDER] => data [type] [data]<br>
+ *     [SENDER] => data [type] [data] [final]<br>
  *
  * Consumes:<br>
  *     MMU => allocate [pid] [blocks] {swap order x:y:x}<br>
  *     MMU => free [pid] [blocks]<br>
- *     MMU => read [pid] [address] {final}<br>
- *     MMU => write [pid] [address] [type] [data] {final}<br>
+ *     MMU => read [pid] [address] [final]<br>
+ *     MMU => write [pid] [address] [type] [data] [final]<br>
  *     MMU => drop [pid]<br>
  *
  * @author cd00827
@@ -151,7 +151,11 @@ public class MMU implements Runnable {
                             this.mailbox.put(Mailbox.MMU, message.getSender(), "data " + data[1] + " " + data[2]);
                             //Unblock process if this was the final read operation
                             if (Boolean.parseBoolean(command[3])) {
+                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data " + data[1] + " " + data[2] + "true");
                                 this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
+                            }
+                            else {
+                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data " + data[1] + " " + data[2] + "false");
                             }
                         }
                         //Drop process if write causes an error
