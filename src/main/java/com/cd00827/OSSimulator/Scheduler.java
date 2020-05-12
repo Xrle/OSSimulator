@@ -1,13 +1,18 @@
 package com.cd00827.OSSimulator;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.Queue;
+import java.nio.file.Path;
+import java.util.*;
 import java.util.stream.Stream;
 /**
  * Produces:<br>
+ *     MMU => write [pid] [address] [type] [data] [final]<br>
+ * Consumes:<br>
+ *     SCHEDULER => new [path]<br>
  *     SCHEDULER => block [pid]<br>
  *     SCHEDULER => unblock [pid]<br>
  *     SCHEDULER => swappedOut [pid]<br>
@@ -25,6 +30,7 @@ public class Scheduler implements Runnable {
     private Queue<PCB> swapQueue;
     private Queue<PCB> loadingQueue;
     private PCB running;
+    private Map<Integer, PCB> processes;
 
     private Mailbox mailbox;
     private double clockSpeed;
@@ -40,12 +46,56 @@ public class Scheduler implements Runnable {
         this.swapQueue = new ArrayDeque<>();
         this.loadingQueue = new ArrayDeque<>();
         this.running = null;
+        this.processes = new HashMap<>();
     }
 
     @Override
     public void run() {
         while (true) {
             //Get next command
+            Message message = this.mailbox.get(Mailbox.SCHEDULER);
+            if (message != null) {
+                String[] command = message.getCommand();
+                switch(command[0]) {
+                    //new [path]
+                    case "new": {
+                        Path path = Path.of(command[1]);
+                        int pid = 0;
+                        while(this.processes.containsKey(pid)) {
+                            pid++;
+                        }
+                        PCB process = new PCB(pid, path, this.quantum);
+                        this.mainQueue.add(process);
+                    }
+                    break;
+
+                    //allocated [pid]
+                    case "allocated": {
+                        int pid = Integer.parseInt(command[1]);
+                        PCB process = this.processes.get(pid);
+                        try {
+                            BufferedReader reader = new BufferedReader(new FileReader(new File(String.valueOf(process.getCodePath()))));
+                            for (int i = 0; i < process.getCodeLength(); i++) {
+                                if (i == process.getCodeLength() - 1) {
+                                    //Signal final write operation
+                                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write " + i + " " + Address.STRING + " " + reader.readLine() + " true");
+                                }
+                                else {
+                                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write " + i + " " + Address.STRING + " " + reader.readLine() + " false");
+                                }
+                            }
+                            //Move process from loading queue to blocked queue
+                            this.loadingQueue.remove(process);
+                            this.blockedQueue.add(process);
+                            process.setLoaded();
+                        }
+                        catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    break;
+                }
+            }
 
             //Round robin
             //If there's a running process, decrement it's quantum and switch process if needed
