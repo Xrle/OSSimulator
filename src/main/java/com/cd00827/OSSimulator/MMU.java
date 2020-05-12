@@ -18,7 +18,8 @@ import java.util.stream.Stream;
  *     SCHEDULER => swappedIn [pid]<br>
  *     SCHEDULER => skip [pid]<br>
  *     SCHEDULER => drop [pid]<br>
- *     [SENDER] => data [type] [data] [final]<br>
+ *     SCHEDULER => allocated [pid]<br>
+ *     [PID] => data [type] [data] [final]<br>
  *
  * Consumes:<br>
  *     MMU => allocate [pid] [blocks] {swap order x:y:x}<br>
@@ -63,16 +64,17 @@ public class MMU implements Runnable {
                 String[] command = message.getCommand();
                 switch (command[0]) {
 
-                    //allocate [pid] [blocks] {swap order x:y:z}
+                    //allocate [pid] [blocks] [loading] {swap order x:y:z}
                     case "allocate": {
                         int pid = Integer.parseInt(command[1]);
                         int blocks = Integer.parseInt(command[2]);
+                        boolean loading = Boolean.parseBoolean(command[3]);
 
                         //Parse swap order
                         Queue<Integer> swapOrder;
                         try {
                             swapOrder = Pattern.compile(":")
-                                    .splitAsStream(command[3]).map(Integer::valueOf)
+                                    .splitAsStream(command[4]).map(Integer::valueOf)
                                     .collect(Collectors.toCollection(ArrayDeque::new));
                         }
                         //If no swap order is provided, catch the exception and initialise an empty list
@@ -86,7 +88,12 @@ public class MMU implements Runnable {
                             switch (this.allocate(pid, blocks)) {
                                 //Success, unblock process
                                 case 1:
-                                    this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
+                                    if (loading) {
+                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "allocated " + pid);
+                                    }
+                                    else {
+                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
+                                    }
                                     done = true;
                                     break;
 
@@ -189,6 +196,7 @@ public class MMU implements Runnable {
                         int pid = Integer.parseInt(command[1]);
                         this.flushProcess(pid);
                     }
+
                     break;
                 }
             }

@@ -7,15 +7,15 @@ public class PCB {
     private int pid;
     private int pc;
     private int codeLength;
-    private File code;
+    private Path codePath;
     private boolean loaded;
     private boolean swapped;
     private int quantum;
     private int timeLeft;
 
-    public PCB(int pid, String codePath, int quantum) {
+    public PCB(int pid, Path codePath, int quantum) {
         this.pid = pid;
-        this.code = new File(codePath);
+        this.codePath = codePath;
         this.loaded = false;
         this.swapped = false;
         this.quantum = quantum;
@@ -43,7 +43,7 @@ public class PCB {
     }
 
     public Path getCodePath() {
-        return this.code.toPath();
+        return this.codePath;
     }
 
     public void setLoaded() {
