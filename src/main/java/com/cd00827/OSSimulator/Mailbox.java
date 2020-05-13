@@ -1,5 +1,6 @@
 package com.cd00827.OSSimulator;
 
+import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.scene.control.ListView;
 
@@ -23,7 +24,7 @@ public class Mailbox {
     synchronized void put(String sender, String target, String command) {
         Message message = new Message(sender, target, command);
         this.queue.add(message);
-        this.log.add(message);
+        Platform.runLater(() -> this.log.add(message));
     }
 
     synchronized Message get(String target) {
@@ -32,7 +33,7 @@ public class Mailbox {
             if (i.getTarget().equals(target)) {
                 message = i;
                 this.queue.remove(i);
-                this.log.remove(message);
+                Platform.runLater(() -> this.log.remove(i));
                 break;
             }
         }

@@ -65,6 +65,7 @@ public class Scheduler implements Runnable {
                             pid++;
                         }
                         PCB process = new PCB(pid, path, this.quantum);
+                        this.processes.put(pid, process);
                         this.mainQueue.add(process);
                     }
                     break;
@@ -76,12 +77,15 @@ public class Scheduler implements Runnable {
                         try {
                             BufferedReader reader = new BufferedReader(new FileReader(new File(String.valueOf(process.getCodePath()))));
                             for (int i = 0; i < process.getCodeLength(); i++) {
-                                if (i == process.getCodeLength() - 1) {
-                                    //Signal final write operation
-                                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write " + i + " " + Address.STRING + " " + reader.readLine() + " true");
-                                }
-                                else {
-                                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write " + i + " " + Address.STRING + " " + reader.readLine() + " false");
+                                String line = reader.readLine();
+                                if (!line.equals("")) {
+                                    if (i == process.getCodeLength() - 1) {
+                                        //Signal final write operation
+                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write " + pid + " " + i + " " + Address.STRING + " " + line + " true");
+                                    }
+                                    else {
+                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write " + pid + " " + i + " " + Address.STRING + " " + line + " false");
+                                    }
                                 }
                             }
                             //Move process from loading queue to blocked queue
@@ -166,7 +170,10 @@ public class Scheduler implements Runnable {
 
     private String getSwapOrder() {
         StringBuilder order = new StringBuilder();
-        for (PCB process : this.mainQueue) {
+        List<PCB> swappable = new ArrayList<>();
+        swappable.addAll(this.mainQueue);
+        swappable.addAll(this.swapQueue);
+        for (PCB process : swappable) {
             if (process.isLoaded() && !process.isSwapped()) {
                 if (order.toString().equals("")) {
                     order.append(process.getPid());
