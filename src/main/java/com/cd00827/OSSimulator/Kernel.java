@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.ResourceBundle;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -65,8 +66,11 @@ public class Kernel implements Initializable {
 
     @FXML
     private void addFile() {
-        for (File file : this.fileChooser.showOpenMultipleDialog(this.stage)) {
-            this.input.getItems().add(new InputFile(file));
+        List<File> files = this.fileChooser.showOpenMultipleDialog(this.stage);
+        if (files != null) {
+            for (File file : files) {
+                this.input.getItems().add(new InputFile(file));
+            }
         }
     }
 
@@ -78,7 +82,7 @@ public class Kernel implements Initializable {
     @FXML
     private void execute() {
         for (InputFile file : this.input.getItems()) {
-            this.mailbox.put(Mailbox.KERNEL, Mailbox.SCHEDULER, "new " + file.getPath());
+            this.mailbox.put(Mailbox.KERNEL, Mailbox.SCHEDULER, "new|" + file.getPath());
         }
         this.input.getItems().clear();
     }
@@ -88,14 +92,14 @@ public class Kernel implements Initializable {
         int pageNumber = 5;
         double memoryClock = 1;
 
-        this.mmu = new Thread(new MMU(pageSize, pageNumber, memoryClock, this.mailbox));
+        this.mmu = new Thread(new MMU(pageSize, pageNumber, memoryClock, this.mailbox, this.output.getItems()));
         this.mmu.start();
         this.output.getItems().add("[KERNEL] Started MMU with " + pageNumber + " " + pageSize + " block pages (" + pageNumber*pageSize + " blocks physical RAM) at clock speed " + memoryClock + "ops/s");
 
-        double schedulerClock = 1;
+        double schedulerClock = 1.5;
         int quantum = 5;
 
-        this.scheduler = new Thread(new Scheduler(schedulerClock, this.mailbox, quantum));
+        this.scheduler = new Thread(new Scheduler(schedulerClock, this.mailbox, quantum, this.output.getItems()));
         this.scheduler.start();
         this.output.getItems().add("[KERNEL] Started scheduler with quantum " + quantum + " at " + schedulerClock + "op/s");
         this.booted = true;

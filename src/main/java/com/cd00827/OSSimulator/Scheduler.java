@@ -1,5 +1,8 @@
 package com.cd00827.OSSimulator;
 
+import javafx.application.Platform;
+import javafx.collections.ObservableList;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -35,8 +38,9 @@ public class Scheduler implements Runnable {
     private Mailbox mailbox;
     private double clockSpeed;
     private int quantum;
+    private final ObservableList<String> log;
 
-    public Scheduler(double clockSpeed, Mailbox mailbox, int quantum) {
+    public Scheduler(double clockSpeed, Mailbox mailbox, int quantum, ObservableList<String> log) {
         this.clockSpeed = clockSpeed;
         this.mailbox = mailbox;
         this.quantum = quantum;
@@ -47,6 +51,11 @@ public class Scheduler implements Runnable {
         this.loadingQueue = new ArrayDeque<>();
         this.running = null;
         this.processes = new HashMap<>();
+        this.log = log;
+    }
+
+    private void log(String message) {
+        Platform.runLater(() -> this.log.add(message));
     }
 
     @Override
@@ -67,6 +76,7 @@ public class Scheduler implements Runnable {
                         PCB process = new PCB(pid, path, this.quantum);
                         this.processes.put(pid, process);
                         this.mainQueue.add(process);
+                        this.log("[SCHEDULER] Created PID " + pid + " from " + path);
                     }
                     break;
 
@@ -81,10 +91,10 @@ public class Scheduler implements Runnable {
                                 if (!line.equals("")) {
                                     if (i == process.getCodeLength() - 1) {
                                         //Signal final write operation
-                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write " + pid + " " + i + " " + Address.STRING + " " + line + " true");
+                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write|" + pid + "|" + i + "|" + Address.STRING + "|" + line + "|true");
                                     }
                                     else {
-                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write " + pid + " " + i + " " + Address.STRING + " " + line + " false");
+                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write|" + pid + "|" + i + "|" + Address.STRING + "|" + line + "|false");
                                     }
                                 }
                             }
@@ -92,10 +102,82 @@ public class Scheduler implements Runnable {
                             this.loadingQueue.remove(process);
                             this.blockedQueue.add(process);
                             process.setLoaded();
+                            this.log("[SCHEDULER] Successfully loaded PID "+ pid);
                         }
                         catch (IOException e) {
                             e.printStackTrace();
                         }
+                    }
+                    break;
+
+                    //block [pid]
+                    case "block": {
+                        int pid = Integer.parseInt(command[1]);
+                        PCB process = this.processes.get(pid);
+                        this.mainQueue.remove(process);
+                        this.priorityQueue.remove(process);
+                        this.blockedQueue.add(process);
+                        this.log("[SCHEDULER] Blocked PID " + pid);
+                    }
+                    break;
+
+                    //unblock [pid]
+                    case "unblock": {
+                        int pid = Integer.parseInt(command[1]);
+                        PCB process = this.processes.get(pid);
+                        if (this.blockedQueue.contains(process)) {
+                            this.blockedQueue.remove(process);
+                            this.priorityQueue.add(process);
+                            this.log("[SCHEDULER] Unblocked PID " + pid);
+                        }
+                        else {
+                            this.log("[SCHEDULER/ERROR] Attempted to unblock PID " + pid + ", but it wasn't blocked");
+                        }
+                    }
+                    break;
+
+                    //swappedIn [pid]
+                    case "swappedIn": {
+                        int pid = Integer.parseInt(command[1]);
+                        PCB process = this.processes.get(pid);
+                        process.setSwapped(false);
+                        this.swapQueue.remove(process);
+                        this.priorityQueue.add(process);
+                        this.log("[SCHEDULER] Marked PID " + pid + " as swapped in");
+                    }
+                    break;
+
+                    //swappedOut [pid]
+                    case "swappedOut": {
+                        int pid = Integer.parseInt(command[1]);
+                        this.processes.get(pid).setSwapped(true);
+                        this.log("[SCHEDULER] Marked PID " + pid + " as swapped out");
+                    }
+                    break;
+
+                    //drop [pid]
+                    case "drop": {
+                        int pid = Integer.parseInt(command[1]);
+                        PCB process = this.processes.get(pid);
+                        this.mainQueue.remove(process);
+                        this.priorityQueue.remove(process);
+                        this.blockedQueue.remove(process);
+                        this.swapQueue.remove(process);
+                        this.processes.remove(pid);
+                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "drop|" + pid);
+                        this.log("[SCHEDULER] Dropped PID " + pid);
+                    }
+                    break;
+
+                    //skip [pid]
+                    case "skip": {
+                        int pid = Integer.parseInt(command[1]);
+                        PCB process = this.processes.get(pid);
+                        this.blockedQueue.remove(process);
+                        this.swapQueue.remove(process);
+                        this.mainQueue.add(process);
+                        this.log("[SCHEDULER] Skipped PID " + pid);
+                        //TODO Don't move a swapped process to main, it seems to break
                     }
                     break;
                 }
@@ -130,7 +212,9 @@ public class Scheduler implements Runnable {
     private void switchProcess() {
         //Move a process from main queue to priority queue if priority queue is empty
         if (this.priorityQueue.isEmpty() && !this.mainQueue.isEmpty()) {
-            this.priorityQueue.add(this.mainQueue.poll());
+            PCB process = this.mainQueue.poll();
+            this.log("[SCHEDULER] Moved PID " + process.getPid() + " to priority queue");
+            this.priorityQueue.add(process);
         }
         //Check priority queue has a process
         if (!this.priorityQueue.isEmpty()) {
@@ -140,11 +224,13 @@ public class Scheduler implements Runnable {
                 //Check process is not swapped out
                 if (!process.isSwapped()) {
                     this.running = process;
+                    this.log("[SCHEDULER] Switched to running PID "+ process.getPid());
                 }
                 //Swap in process
                 else {
-                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "swapIn " + process.getPid());
+                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "swapIn|" + process.getPid());
                     this.swapQueue.add(process);
+                    this.log("[SCHEDULER] Waiting for PID " + process.getPid() + " to be swapped in");
                 }
             }
             //Load process file
@@ -156,8 +242,9 @@ public class Scheduler implements Runnable {
                     int blocks = (int) stream.count();
                     stream.close();
                     process.setCodeLength(blocks);
-                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "allocate " + process.getPid() + " " + blocks + " true " + this.getSwapOrder());
+                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "allocate|" + process.getPid() + "|" + blocks + "|true|" + this.getSwapOrder());
                     this.loadingQueue.add(process);
+                    this.log("[SCHEDULER] Waiting for PID " + process.getPid() + " to be loaded from file");
 
                 }
                 catch (IOException e) {
@@ -170,10 +257,10 @@ public class Scheduler implements Runnable {
 
     private String getSwapOrder() {
         StringBuilder order = new StringBuilder();
-        List<PCB> swappable = new ArrayList<>();
-        swappable.addAll(this.mainQueue);
-        swappable.addAll(this.swapQueue);
-        for (PCB process : swappable) {
+        //List<PCB> swappable = new ArrayList<>();
+        //swappable.addAll(this.mainQueue);
+        //swappable.addAll(this.swapQueue);
+        for (PCB process : this.mainQueue) {
             if (process.isLoaded() && !process.isSwapped()) {
                 if (order.toString().equals("")) {
                     order.append(process.getPid());

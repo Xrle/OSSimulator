@@ -1,5 +1,8 @@
 package com.cd00827.OSSimulator;
 
+import javafx.application.Platform;
+import javafx.collections.ObservableList;
+
 import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
@@ -41,8 +44,9 @@ public class MMU implements Runnable {
     private final Map<Integer, Boolean> frameAllocationRecord;
     private final Mailbox mailbox;
     private final double clockSpeed;
+    private final ObservableList<String> log;
 
-    public MMU(int pageSize, int pageNumber, double clockSpeed, Mailbox mailbox) {
+    public MMU(int pageSize, int pageNumber, double clockSpeed, Mailbox mailbox, ObservableList<String> log) {
         this.ram = new Address[pageSize * pageNumber];
         this.pageSize = pageSize;
         this.pageNumber = pageNumber;
@@ -53,6 +57,11 @@ public class MMU implements Runnable {
         for (int page = 0; page < pageNumber; page++) {
             frameAllocationRecord.put(page * pageSize, false);
         }
+        this.log = log;
+    }
+
+    private void log(String message) {
+        Platform.runLater(() -> this.log.add(message));
     }
 
     @Override
@@ -89,11 +98,12 @@ public class MMU implements Runnable {
                                 //Success, unblock process
                                 case 1:
                                     if (loading) {
-                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "allocated " + pid);
+                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "allocated|" + pid);
                                     }
                                     else {
-                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
+                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock|" + pid);
                                     }
+                                    this.log("[MMU] Allocated " + blocks + " blocks to PID " + pid);
                                     done = true;
                                     break;
 
@@ -103,18 +113,21 @@ public class MMU implements Runnable {
                                     if (process == null) {
                                         //There is enough memory in the system, but no processes are available to swap
                                         //Tell scheduler to skip this process
-                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "skip " + pid);
+                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "skip|" + pid);
+                                        this.log("[MMU] Could not swap out enough processes to allocate for PID " + pid + ", skipping");
                                         done = true;
                                     } else {
                                         //Swap out process and notify scheduler
                                         this.swapOut(process);
-                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedOut " + pid);
+                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedOut|" + pid);
+                                        this.log("[MMU] Swapped out PID " + pid);
                                     }
                                     break;
 
                                 //Not enough total system memory - drop the process
                                 case -2:
-                                    this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
+                                    this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop|" + pid);
+                                    this.log("[MMU/ERROR] Out of memory for PID " + pid);
                                     //Break out of loop as nothing more can be done
                                     done = true;
                                     break;
@@ -128,9 +141,13 @@ public class MMU implements Runnable {
                         int pid = Integer.parseInt(command[1]);
                         int blocks = Integer.parseInt(command[2]);
 
-                        if (!this.free(pid, blocks)) {
+                        if (this.free(pid, blocks)) {
+                            this.log("[MMU] Freed "+ blocks + " blocks from PID " + pid);
+                        }
+                        else{
                             //Process has caused an error, so drop it
-                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop|" + pid);
+                            this.log("[MMU/ERROR] PID " + pid + "attempted to free more memory than allocated to it");
                         }
                     }
                     break;
@@ -141,10 +158,12 @@ public class MMU implements Runnable {
                         //If there is enough memory to swap in process, do it and notify scheduler.
                         //Otherwise tell scheduler to skip this process
                         if (this.swapIn(pid)) {
-                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedOut " + pid);
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedIn|" + pid);
+                            this.log("[MMU] Swapped in PID " + pid);
                         }
                         else {
-                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "skip " + pid);
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "skip|" + pid);
+                            this.log("[MMU] Not enough free memory to swap in PID " + pid + ", skipping");
                         }
                     }
                     break;
@@ -156,19 +175,20 @@ public class MMU implements Runnable {
                         String[] data = this.read(pid, address);
                         //If read is successful, send data to whatever requested it, otherwise drop the process
                         if (data[0].equals("success")) {
-                            this.mailbox.put(Mailbox.MMU, message.getSender(), "data " + data[1] + " " + data[2]);
                             //Unblock process if this was the final read operation
                             if (Boolean.parseBoolean(command[3])) {
-                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data " + data[1] + " " + data[2] + "true");
-                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
+                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data|" + data[1] + "|" + data[2] + "|true");
+                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock|" + pid);
                             }
                             else {
-                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data " + data[1] + " " + data[2] + "false");
+                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data|" + data[1] + "|" + data[2] + "|false");
                             }
+                            this.log("[MMU] Read '" + data[2] + "' from virtual address " + address + " for PID " + pid);
                         }
                         //Drop process if write causes an error
                         else {
-                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop|" + pid);
+                            this.log("[MMU/ERROR] PID " + pid + "attempted to read from an invalid address");
                         }
                     }
                     break;
@@ -182,11 +202,13 @@ public class MMU implements Runnable {
                         if (this.write(pid, address, type, data)) {
                             //Unblock process if this was the final write operation
                             if (Boolean.parseBoolean(command[5])) {
-                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock " + pid);
-                            }
+                                this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock|" + pid);
+                            }this.log("[MMU] Wrote '" + data + "' to virtual address " + address + " for PID " + pid);
+
                         }
                         else {
-                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop " + pid);
+                            this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop|" + pid);
+                            this.log("[MMU/ERROR] PID " + pid + "attempted to write to an invalid address");
                         }
                     }
                     break;
@@ -195,6 +217,7 @@ public class MMU implements Runnable {
                     case "drop": {
                         int pid = Integer.parseInt(command[1]);
                         this.flushProcess(pid);
+                        this.log("[MMU] Dropped PID " + pid);
                     }
 
                     break;
@@ -374,7 +397,8 @@ public class MMU implements Runnable {
         }
         catch (Exception e){
             e.printStackTrace();
-            throw new RuntimeException("FATAL: Swapping out PID " + pid + " failed, check you have r/w access to /swap");
+            this.log("MMU/FATAL] Swapping out PID " + pid + " failed, check you have r/w access to /swap");
+            throw new RuntimeException("MMU/FATAL] Swapping out PID " + pid + " failed, check you have r/w access to /swap");
         }
     }
 
@@ -412,7 +436,9 @@ public class MMU implements Runnable {
             reader.close();
         }
         catch (IOException e) {
-            throw new RuntimeException("FATAL: Swapping in PID " + pid + " failed, check you have r/w access to /swap");
+            e.printStackTrace();
+            this.log("[MMU/FATAL] Swapping in PID " + pid + " failed, check you have r/w access to /swap");
+            throw new RuntimeException("[MMU/FATAL] Swapping in PID " + pid + " failed, check you have r/w access to /swap");
         }
         return true;
     }

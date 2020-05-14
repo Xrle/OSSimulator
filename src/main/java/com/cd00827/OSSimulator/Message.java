@@ -20,11 +20,11 @@ public class Message {
     }
 
     public String[] getCommand() {
-        return this.command.split("\\s");
+        return this.command.split("\\|");
     }
 
     @Override
     public String toString() {
-        return "[" + this.sender + " => " + this.target + "] " + this.command;
+        return "[" + this.sender + " => " + this.target + "] " + this.command.replace("|", " | ");
     }
 }
