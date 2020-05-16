@@ -6,6 +6,7 @@ import javafx.collections.ObservableList;
 import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -25,7 +26,7 @@ import java.util.stream.Stream;
  *     [PID] => data [type] [data] [final]<br>
  *
  * Consumes:<br>
- *     MMU => allocate [pid] [blocks] {swap order x:y:x}<br>
+ *     MMU => allocate [pid] [blocks] [loading]<br>
  *     MMU => free [pid] [blocks]<br>
  *     MMU => swapIn [pid]<br>
  *     MMU => read [pid] [address] [final]<br>
@@ -45,8 +46,10 @@ public class MMU implements Runnable {
     private final Mailbox mailbox;
     private final double clockSpeed;
     private final ObservableList<String> log;
+    private ReentrantLock swapLock;
+    private List<PCB> swappable;
 
-    public MMU(int pageSize, int pageNumber, double clockSpeed, Mailbox mailbox, ObservableList<String> log) {
+    public MMU(int pageSize, int pageNumber, double clockSpeed, Mailbox mailbox, ObservableList<String> log, ReentrantLock swapLock, List<PCB> swappable) {
         this.ram = new Address[pageSize * pageNumber];
         this.pageSize = pageSize;
         this.pageNumber = pageNumber;
@@ -58,6 +61,8 @@ public class MMU implements Runnable {
             frameAllocationRecord.put(page * pageSize, false);
         }
         this.log = log;
+        this.swapLock = swapLock;
+        this.swappable = swappable;
     }
 
     private void log(String message) {
@@ -73,24 +78,14 @@ public class MMU implements Runnable {
                 String[] command = message.getCommand();
                 switch (command[0]) {
 
-                    //allocate [pid] [blocks] [loading] {swap order x:y:z}
+                    //allocate [pid] [blocks] [loading]
                     case "allocate": {
                         int pid = Integer.parseInt(command[1]);
                         int blocks = Integer.parseInt(command[2]);
                         boolean loading = Boolean.parseBoolean(command[3]);
-
-                        //Parse swap order
-                        Queue<Integer> swapOrder;
-                        try {
-                            swapOrder = Pattern.compile(":")
-                                    .splitAsStream(command[4]).map(Integer::valueOf)
-                                    .collect(Collectors.toCollection(ArrayDeque::new));
-                        }
-                        //If no swap order is provided, catch the exception and initialise an empty list
-                        catch (ArrayIndexOutOfBoundsException e) {
-                            swapOrder = new ArrayDeque<>();
-                        }
                         boolean done = false;
+                        boolean swapping = false;
+                        int swapIndex = 0;
 
                         //Allocate memory
                         while (!done) {
@@ -109,16 +104,28 @@ public class MMU implements Runnable {
 
                                 //Must free up memory and try again
                                 case -1:
-                                    Integer process = swapOrder.poll();
+                                    //If this is the first swap operation, acquire swap lock or wait until available
+                                    if (!swapping) {
+                                        swapping = true;
+                                        this.swapLock.lock();
+                                    }
+                                    PCB process = null;
+                                    try {
+                                        process = this.swappable.get(swapIndex);
+                                    }
+                                    catch (IndexOutOfBoundsException ignored) {}
+
                                     if (process == null) {
                                         //There is enough memory in the system, but no processes are available to swap
                                         //Tell scheduler to skip this process
                                         this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "skip|" + pid);
                                         this.log("[MMU] Could not swap out enough processes to allocate for PID " + pid + ", skipping");
                                         done = true;
-                                    } else {
+                                    }
+                                    else {
                                         //Swap out process and notify scheduler
-                                        this.swapOut(process);
+                                        this.swapOut(process.getPid());
+                                        swapIndex++;
                                         this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedOut|" + pid);
                                         this.log("[MMU] Swapped out PID " + pid);
                                     }
@@ -132,6 +139,10 @@ public class MMU implements Runnable {
                                     done = true;
                                     break;
                             }
+                        }
+                        //If swapping occurred, release swap lock so scheduler can run again
+                        if (swapping) {
+                            this.swapLock.unlock();
                         }
                     }
                     break;

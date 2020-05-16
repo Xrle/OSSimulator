@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 /**
  * Produces:<br>
@@ -27,11 +28,11 @@ import java.util.stream.Stream;
  * @author cd00827
  **/
 public class Scheduler implements Runnable {
-    private Queue<PCB> mainQueue;
-    private Queue<PCB> priorityQueue;
-    private Queue<PCB> blockedQueue;
-    private Queue<PCB> swapQueue;
-    private Queue<PCB> loadingQueue;
+    private Deque<PCB> mainQueue;
+    private Deque<PCB> priorityQueue;
+    private Deque<PCB> blockedQueue;
+    private Deque<PCB> swapQueue;
+    private Deque<PCB> loadingQueue;
     private PCB running;
     private Map<Integer, PCB> processes;
 
@@ -39,8 +40,10 @@ public class Scheduler implements Runnable {
     private double clockSpeed;
     private int quantum;
     private final ObservableList<String> log;
+    private ReentrantLock swapLock;
+    private List<PCB> swappable;
 
-    public Scheduler(double clockSpeed, Mailbox mailbox, int quantum, ObservableList<String> log) {
+    public Scheduler(double clockSpeed, Mailbox mailbox, int quantum, ObservableList<String> log, ReentrantLock swapLock, List<PCB> swappable) {
         this.clockSpeed = clockSpeed;
         this.mailbox = mailbox;
         this.quantum = quantum;
@@ -52,6 +55,8 @@ public class Scheduler implements Runnable {
         this.running = null;
         this.processes = new HashMap<>();
         this.log = log;
+        this.swapLock = swapLock;
+        this.swappable = swappable;
     }
 
     private void log(String message) {
@@ -61,6 +66,10 @@ public class Scheduler implements Runnable {
     @Override
     public void run() {
         while (true) {
+            //Acquire swap lock - MMU cannot swap out processes until lock is released
+            //If MMU is currently swapping out processes, wait for it to complete
+            this.swapLock.lock();
+
             //Get next command
             Message message = this.mailbox.get(Mailbox.SCHEDULER);
             if (message != null) {
@@ -98,6 +107,7 @@ public class Scheduler implements Runnable {
                                     }
                                 }
                             }
+                            reader.close();
                             //Move process from loading queue to blocked queue
                             this.loadingQueue.remove(process);
                             this.blockedQueue.add(process);
@@ -175,9 +185,9 @@ public class Scheduler implements Runnable {
                         PCB process = this.processes.get(pid);
                         this.blockedQueue.remove(process);
                         this.swapQueue.remove(process);
+                        this.loadingQueue.remove(process);
                         this.mainQueue.add(process);
                         this.log("[SCHEDULER] Skipped PID " + pid);
-                        //TODO Don't move a swapped process to main, it seems to break
                     }
                     break;
                 }
@@ -190,6 +200,8 @@ public class Scheduler implements Runnable {
                 if(this.running.decrement()) {
                     //Send previous to back of queue
                     this.mainQueue.add(this.running);
+                    //Set running to null to prevent processes duplicating
+                    this.running = null;
                     switchProcess();
                 }
             }
@@ -198,6 +210,20 @@ public class Scheduler implements Runnable {
                 switchProcess();
             }
 
+            //Update list of swappable processes
+            this.swappable.clear();
+            List<PCB> bothQueues = new ArrayList<>();
+            bothQueues.addAll(this.mainQueue);
+            bothQueues.addAll(this.priorityQueue);
+
+            for (PCB process : bothQueues) {
+                if (process.isLoaded() && !process.isSwapped()) {
+                    this.swappable.add(process);
+                }
+            }
+
+            //Release swap lock, allowing MMU a window to swap out processes
+            this.swapLock.unlock();
 
             //Wait for next clock cycle
             try {
@@ -242,7 +268,7 @@ public class Scheduler implements Runnable {
                     int blocks = (int) stream.count();
                     stream.close();
                     process.setCodeLength(blocks);
-                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "allocate|" + process.getPid() + "|" + blocks + "|true|" + this.getSwapOrder());
+                    this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "allocate|" + process.getPid() + "|" + blocks + "|true");
                     this.loadingQueue.add(process);
                     this.log("[SCHEDULER] Waiting for PID " + process.getPid() + " to be loaded from file");
 
@@ -253,23 +279,5 @@ public class Scheduler implements Runnable {
                 //Write commands will be sent after MMU notifies of successful allocation
             }
         }
-    }
-
-    private String getSwapOrder() {
-        StringBuilder order = new StringBuilder();
-        //List<PCB> swappable = new ArrayList<>();
-        //swappable.addAll(this.mainQueue);
-        //swappable.addAll(this.swapQueue);
-        for (PCB process : this.mainQueue) {
-            if (process.isLoaded() && !process.isSwapped()) {
-                if (order.toString().equals("")) {
-                    order.append(process.getPid());
-                }
-                else {
-                    order.append(":").append(process.getPid());
-                }
-            }
-        }
-        return order.toString();
     }
 }

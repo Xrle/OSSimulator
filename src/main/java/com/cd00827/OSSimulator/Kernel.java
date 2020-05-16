@@ -4,8 +4,11 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
+import java.util.concurrent.locks.ReentrantLock;
+
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
@@ -37,6 +40,8 @@ public class Kernel implements Initializable {
     private Thread scheduler;
     private boolean booted = false;
     private FileChooser fileChooser;
+    private ReentrantLock swapLock;
+    private List<PCB> swappable;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -44,6 +49,8 @@ public class Kernel implements Initializable {
         this.fileChooser = new FileChooser();
         this.fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
         this.input.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        this.swapLock = new ReentrantLock();
+        this.swappable = new ArrayList<>();
 
         //Set up input directory
         File dir = new File("input");
@@ -92,14 +99,14 @@ public class Kernel implements Initializable {
         int pageNumber = 5;
         double memoryClock = 1;
 
-        this.mmu = new Thread(new MMU(pageSize, pageNumber, memoryClock, this.mailbox, this.output.getItems()));
+        this.mmu = new Thread(new MMU(pageSize, pageNumber, memoryClock, this.mailbox, this.output.getItems(), this.swapLock, this.swappable));
         this.mmu.start();
         this.output.getItems().add("[KERNEL] Started MMU with " + pageNumber + " " + pageSize + " block pages (" + pageNumber*pageSize + " blocks physical RAM) at clock speed " + memoryClock + "ops/s");
 
         double schedulerClock = 1.5;
         int quantum = 5;
 
-        this.scheduler = new Thread(new Scheduler(schedulerClock, this.mailbox, quantum, this.output.getItems()));
+        this.scheduler = new Thread(new Scheduler(schedulerClock, this.mailbox, quantum, this.output.getItems(), this.swapLock, this.swappable));
         this.scheduler.start();
         this.output.getItems().add("[KERNEL] Started scheduler with quantum " + quantum + " at " + schedulerClock + "op/s");
         this.booted = true;
