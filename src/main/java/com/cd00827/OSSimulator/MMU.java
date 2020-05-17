@@ -126,8 +126,8 @@ public class MMU implements Runnable {
                                         //Swap out process and notify scheduler
                                         this.swapOut(process.getPid());
                                         swapIndex++;
-                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedOut|" + pid);
-                                        this.log("[MMU] Swapped out PID " + pid);
+                                        this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "swappedOut|" + process.getPid());
+                                        this.log("[MMU] Swapped out PID " + process.getPid());
                                     }
                                     break;
 
