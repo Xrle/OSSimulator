@@ -169,6 +169,9 @@ public class Scheduler implements Runnable {
                     case "drop": {
                         int pid = Integer.parseInt(command[1]);
                         PCB process = this.processes.get(pid);
+                        if (this.running == process) {
+                            this.running = null;
+                        }
                         this.mainQueue.remove(process);
                         this.priorityQueue.remove(process);
                         this.blockedQueue.remove(process);
