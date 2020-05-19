@@ -214,8 +214,8 @@ public class MMU implements Runnable {
                             //Unblock process if this was the final write operation
                             if (Boolean.parseBoolean(command[5])) {
                                 this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock|" + pid);
-                            }this.log("[MMU] Wrote '" + data + "' to virtual address " + address + " for PID " + pid);
-
+                            }
+                            this.log("[MMU] Wrote '" + data + "' to virtual address " + address + " for PID " + pid);
                         }
                         else {
                             this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop|" + pid);
