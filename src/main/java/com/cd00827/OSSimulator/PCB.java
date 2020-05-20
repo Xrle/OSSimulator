@@ -1,17 +1,16 @@
 package com.cd00827.OSSimulator;
 
-import java.io.File;
 import java.nio.file.Path;
 
 public class PCB {
     private int pid;
-    private int pc;
     private int codeLength;
     private Path codePath;
     private boolean loaded;
     private boolean swapped;
     private int quantum;
     private int timeLeft;
+    public int pc;
 
     public PCB(int pid, Path codePath, int quantum) {
         this.pid = pid;
@@ -20,14 +19,7 @@ public class PCB {
         this.swapped = false;
         this.quantum = quantum;
         this.timeLeft = quantum;
-    }
-
-    public int getPc() {
-        return pc;
-    }
-
-    public void setPc(int pc) {
-        this.pc = pc;
+        this.pc = 0;
     }
 
     public int getCodeLength() {

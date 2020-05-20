@@ -63,6 +63,10 @@ public class Scheduler implements Runnable {
         Platform.runLater(() -> this.log.add(message));
     }
 
+    public PCB getRunning() {
+        return this.running;
+    }
+
     @Override
     public void run() {
         while (true) {

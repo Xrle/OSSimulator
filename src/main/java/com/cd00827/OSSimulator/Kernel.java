@@ -38,10 +38,12 @@ public class Kernel implements Initializable {
     private Mailbox mailbox;
     private Thread mmu;
     private Thread scheduler;
+    private Thread cpu;
     private boolean booted = false;
     private FileChooser fileChooser;
     private ReentrantLock swapLock;
     private List<PCB> swappable;
+    private PCB running;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -106,9 +108,17 @@ public class Kernel implements Initializable {
         double schedulerClock = 1.5;
         int quantum = 5;
 
-        this.scheduler = new Thread(new Scheduler(schedulerClock, this.mailbox, quantum, this.output.getItems(), this.swapLock, this.swappable));
+        Scheduler schedulerInstance = new Scheduler(schedulerClock, this.mailbox, quantum, this.output.getItems(), this.swapLock, this.swappable);
+        this.scheduler = new Thread(schedulerInstance);
         this.scheduler.start();
         this.output.getItems().add("[KERNEL] Started scheduler with quantum " + quantum + " at " + schedulerClock + "op/s");
+
+        double cpuClock = 1.2;
+
+        this.cpu = new Thread(new CPU(schedulerInstance, this.mailbox, cpuClock, this.execTrace.getItems(), this.output.getItems()));
+        this.cpu.start();
+        this.output.getItems().add("[KERNEL] Started CPU at " + cpuClock + "op/s");
+
         this.booted = true;
     }
 
@@ -120,6 +130,7 @@ public class Kernel implements Initializable {
         if (this.booted) {
             this.mmu.interrupt();
             this.scheduler.interrupt();
+            this.cpu.interrupt();
         }
     }
 }
