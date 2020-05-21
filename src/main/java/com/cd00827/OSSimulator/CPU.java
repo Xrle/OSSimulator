@@ -3,7 +3,9 @@ package com.cd00827.OSSimulator;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 
+import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.Map;
 
 public class CPU implements Runnable{
@@ -14,6 +16,7 @@ public class CPU implements Runnable{
     private ObservableList<String> trace;
     private ObservableList<String> output;
     private Deque<String[]> dataBuffer;
+    private Map<Integer, String> instructionCache;
 
     public CPU(Scheduler scheduler, Mailbox mailbox, double clockSpeed, ObservableList<String> trace, ObservableList<String> output) {
         this.scheduler = scheduler;
@@ -22,6 +25,8 @@ public class CPU implements Runnable{
         this.trace = trace;
         this.output = output;
         this.process = null;
+        this.dataBuffer = new ArrayDeque<>();
+        this.instructionCache = new HashMap<>();
     }
 
     private void output(String message) {
@@ -39,6 +44,15 @@ public class CPU implements Runnable{
             this.process = this.scheduler.getRunning();
             int pid = this.process.getPid();
             this.dataBuffer.clear();
+
+            //If there is no instruction cached, get a new one
+            if (!this.instructionCache.containsKey(pid)) {
+                this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.process.pc + "|true");
+                this.scheduler.block(this.process);
+                this.process = null;
+                //TODO make blocking more immediate (between scheduler cycles?)
+            }
+
 
             //Get instruction
             String instruction = null;

@@ -17,7 +17,6 @@ import java.util.stream.Stream;
  *     MMU => write [pid] [address] [type] [data] [final]<br>
  * Consumes:<br>
  *     SCHEDULER => new [path]<br>
- *     SCHEDULER => block [pid]<br>
  *     SCHEDULER => unblock [pid]<br>
  *     SCHEDULER => swappedOut [pid]<br>
  *     SCHEDULER => swappedIn [pid]<br>
@@ -41,6 +40,7 @@ public class Scheduler implements Runnable {
     private int quantum;
     private final ObservableList<String> log;
     private ReentrantLock swapLock;
+    private ReentrantLock blockLock;
     private List<PCB> swappable;
 
     public Scheduler(double clockSpeed, Mailbox mailbox, int quantum, ObservableList<String> log, ReentrantLock swapLock, List<PCB> swappable) {
@@ -57,6 +57,7 @@ public class Scheduler implements Runnable {
         this.log = log;
         this.swapLock = swapLock;
         this.swappable = swappable;
+        this.blockLock = new ReentrantLock();
     }
 
     private void log(String message) {
@@ -65,6 +66,18 @@ public class Scheduler implements Runnable {
 
     public PCB getRunning() {
         return this.running;
+    }
+
+    public void block(PCB process) {
+        this.blockLock.lock();
+        if (this.running == process) {
+            this.running = null;
+        }
+        this.mainQueue.remove(process);
+        this.priorityQueue.remove(process);
+        this.blockedQueue.add(process);
+        this.log("[SCHEDULER] Blocked PID " + process.getPid());
+        this.blockLock.unlock();
     }
 
     @Override
@@ -121,17 +134,6 @@ public class Scheduler implements Runnable {
                         catch (IOException e) {
                             e.printStackTrace();
                         }
-                    }
-                    break;
-
-                    //block [pid]
-                    case "block": {
-                        int pid = Integer.parseInt(command[1]);
-                        PCB process = this.processes.get(pid);
-                        this.mainQueue.remove(process);
-                        this.priorityQueue.remove(process);
-                        this.blockedQueue.add(process);
-                        this.log("[SCHEDULER] Blocked PID " + pid);
                     }
                     break;
 
@@ -216,6 +218,10 @@ public class Scheduler implements Runnable {
             else {
                 switchProcess();
             }
+
+            //If the CPU wants to block it's process, it must happen after this scheduler cycle but before swappable is updated
+            this.blockLock.unlock();
+            this.blockLock.lock();
 
             //Update list of swappable processes
             this.swappable.clear();
