@@ -42,46 +42,52 @@ public class CPU implements Runnable{
         while (true) {
             //Get a reference to running process
             this.process = this.scheduler.getRunning();
-            int pid = this.process.getPid();
-            this.dataBuffer.clear();
+            if (this.process != null) {
+                int pid = this.process.getPid();
+                this.dataBuffer.clear();
 
-            //If there is no instruction cached, get a new one
-            if (!this.instructionCache.containsKey(pid)) {
-                this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.process.pc + "|true");
-                this.scheduler.block(this.process);
-                this.process = null;
-                //TODO make blocking more immediate (between scheduler cycles?)
-            }
+                //If there is no instruction cached, try and pull one from the mailbox, otherwise request a new one
+                if (!this.instructionCache.containsKey(pid)) {
+                    Message message = this.mailbox.get(String.valueOf(pid));
+                    if (message == null) {
+                        this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.process.pc + "|true");
+                        this.scheduler.block(this.process);
+                        this.process = null;
+                    }
+                    else {
+                        this.instructionCache.put(pid, message.getCommand()[2]);
+                    }
+                }
 
-
-            //Get instruction
-            String instruction = null;
-
-            //Load requested data into buffer
-            boolean done = false;
-            while(!done) {
-                Message message = this.mailbox.get(String.valueOf(pid));
-                if (message != null) {
-                    String[] command = message.getCommand();
-                    if (command[0].equals("data")) {
-                        this.dataBuffer.add(new String[] {command[1], command[2]});
-                        if (command[3].equals("true")) {
+                //Check that the process wasn't just blocked
+                if (this.process != null) {
+                    //Load requested data into buffer
+                    boolean done = false;
+                    while(!done) {
+                        Message message = this.mailbox.get(String.valueOf(pid));
+                        if (message != null) {
+                            String[] command = message.getCommand();
+                            if (command[0].equals("data")) {
+                                this.dataBuffer.add(new String[] {command[1], command[2]});
+                                if (command[3].equals("true")) {
+                                    done = true;
+                                }
+                            }
+                        }
+                        else {
                             done = true;
                         }
                     }
-                }
-                else {
-                    done = true;
-                }
-            }
-            if (!this.dataBuffer.isEmpty()) {
-                this.exec(instruction);
-            }
-            else {
-                this.execData(instruction, this.dataBuffer);
-            }
 
-
+                    //If data was provided execute instruction with it. If not, execution will determine the data needed
+                    if (!this.dataBuffer.isEmpty()) {
+                        this.exec(this.instructionCache.get(pid));
+                    }
+                    else {
+                        this.execData(this.instructionCache.get(pid), this.dataBuffer);
+                    }
+                }
+            }
 
             //Wait for next clock cycle
             try {

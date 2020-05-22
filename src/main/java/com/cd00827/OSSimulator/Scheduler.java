@@ -68,6 +68,13 @@ public class Scheduler implements Runnable {
         return this.running;
     }
 
+    /**
+     * Block a specified process, used by the CPU to block it's current process.
+     * This is the only scheduler operation not accessed through the mailbox, as it must be executed immediately,
+     * or the CPU must wait for it to execute so that it doesn't reacquire a process it has blocked if the scheduler has
+     * a backlog of commands to execute.
+     * @param process Process to block
+     */
     public void block(PCB process) {
         this.blockLock.lock();
         if (this.running == process) {
@@ -80,11 +87,16 @@ public class Scheduler implements Runnable {
         this.blockLock.unlock();
     }
 
+    private void updateSwappable() {
+
+    }
+
     @Override
     public void run() {
         while (true) {
             //Acquire swap lock - MMU cannot swap out processes until lock is released
             //If MMU is currently swapping out processes, wait for it to complete
+            //CPU must also wait to swap out it's process, as calling block requires an update to swappable
             this.swapLock.lock();
 
             //Get next command
@@ -219,7 +231,9 @@ public class Scheduler implements Runnable {
                 switchProcess();
             }
 
-            //If the CPU wants to block it's process, it must happen after this scheduler cycle but before swappable is updated
+            //Allow CPU to block it's process before updating swappable in case the process was just switched
+            //This prevents the MMU from swapping out a process that should be blocked
+            //Swapping out a process with a pending MMU operation would be catastrophic
             this.blockLock.unlock();
             this.blockLock.lock();
 
@@ -235,7 +249,7 @@ public class Scheduler implements Runnable {
                 }
             }
 
-            //Release swap lock, allowing MMU a window to swap out processes
+            //Release swap lock, allowing MMU to swap processes
             this.swapLock.unlock();
 
             //Wait for next clock cycle
