@@ -80,7 +80,7 @@ public class CPU implements Runnable{
                     }
 
                     //If data was provided execute instruction with it. If not, execution will determine the data needed
-                    if (!this.dataBuffer.isEmpty()) {
+                    if (this.dataBuffer.isEmpty()) {
                         this.exec(this.instructionCache.get(pid));
                     }
                     else {
