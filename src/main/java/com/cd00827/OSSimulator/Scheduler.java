@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 /**
@@ -40,7 +41,7 @@ public class Scheduler implements Runnable {
     private int quantum;
     private final ObservableList<String> log;
     private ReentrantLock swapLock;
-    private ReentrantLock blockLock;
+    private SynchronousQueue<PCB> blockRendezvous;
     private List<PCB> swappable;
 
     public Scheduler(double clockSpeed, Mailbox mailbox, int quantum, ObservableList<String> log, ReentrantLock swapLock, List<PCB> swappable) {
@@ -57,7 +58,7 @@ public class Scheduler implements Runnable {
         this.log = log;
         this.swapLock = swapLock;
         this.swappable = swappable;
-        this.blockLock = new ReentrantLock();
+        this.blockRendezvous = new SynchronousQueue<>();
     }
 
     private void log(String message) {
@@ -76,15 +77,12 @@ public class Scheduler implements Runnable {
      * @param process Process to block
      */
     public void block(PCB process) {
-        this.blockLock.lock();
-        if (this.running == process) {
-            this.running = null;
+        try {
+            this.blockRendezvous.put(process);
         }
-        this.mainQueue.remove(process);
-        this.priorityQueue.remove(process);
-        this.blockedQueue.add(process);
-        this.log("[SCHEDULER] Blocked PID " + process.getPid());
-        this.blockLock.unlock();
+        catch (InterruptedException e) {
+            this.log("[SCHEDULER/ERROR] Block operation interrupted");
+        }
     }
 
     private void updateSwappable() {
@@ -96,7 +94,6 @@ public class Scheduler implements Runnable {
         while (true) {
             //Acquire swap lock - MMU cannot swap out processes until lock is released
             //If MMU is currently swapping out processes, wait for it to complete
-            //CPU must also wait to swap out it's process, as calling block requires an update to swappable
             this.swapLock.lock();
 
             //Get next command
@@ -145,21 +142,6 @@ public class Scheduler implements Runnable {
                         }
                         catch (IOException e) {
                             e.printStackTrace();
-                        }
-                    }
-                    break;
-
-                    //unblock [pid]
-                    case "unblock": {
-                        int pid = Integer.parseInt(command[1]);
-                        PCB process = this.processes.get(pid);
-                        if (this.blockedQueue.contains(process)) {
-                            this.blockedQueue.remove(process);
-                            this.priorityQueue.add(process);
-                            this.log("[SCHEDULER] Unblocked PID " + pid);
-                        }
-                        else {
-                            this.log("[SCHEDULER/ERROR] Attempted to unblock PID " + pid + ", but it wasn't blocked");
                         }
                     }
                     break;
@@ -231,12 +213,6 @@ public class Scheduler implements Runnable {
                 switchProcess();
             }
 
-            //Allow CPU to block it's process before updating swappable in case the process was just switched
-            //This prevents the MMU from swapping out a process that should be blocked
-            //Swapping out a process with a pending MMU operation would be catastrophic
-            this.blockLock.unlock();
-            this.blockLock.lock();
-
             //Update list of swappable processes
             this.swappable.clear();
             List<PCB> bothQueues = new ArrayList<>();
@@ -246,6 +222,40 @@ public class Scheduler implements Runnable {
             for (PCB process : bothQueues) {
                 if (process.isLoaded() && !process.isSwapped()) {
                     this.swappable.add(process);
+                }
+            }
+
+            //Allow the CPU to block it's process, must happen after scheduling but before swapping otherwise MMU may attempt
+            //to swap out a process that the scheduler has just switched from, but that the CPU still wants to block
+            {
+                PCB process = this.blockRendezvous.poll();
+                if (process != null) {
+                    if (this.running == process) {
+                        this.running = null;
+                    }
+                    this.mainQueue.remove(process);
+                    this.priorityQueue.remove(process);
+                    this.blockedQueue.add(process);
+                    this.log("[SCHEDULER] Blocked PID " + process.getPid());
+                }
+            }
+
+            //Unblock command must be executed after blocking, otherwise the MMU can finish it's operations and unblock
+            //the process before the CPU has been able to block the process, causing errors.
+            //unblock [pid]
+            if (message != null) {
+                String[] command = message.getCommand();
+                if (command[0].equals("unblock")) {
+                    int pid = Integer.parseInt(command[1]);
+                    PCB process = this.processes.get(pid);
+                    if (this.blockedQueue.contains(process)) {
+                        this.blockedQueue.remove(process);
+                        this.priorityQueue.add(process);
+                        this.log("[SCHEDULER] Unblocked PID " + pid);
+                    }
+                    else {
+                        this.log("[SCHEDULER/ERROR] Attempted to unblock PID " + pid + ", but it wasn't blocked");
+                    }
                 }
             }
 

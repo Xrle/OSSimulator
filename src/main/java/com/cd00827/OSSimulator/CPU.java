@@ -51,6 +51,7 @@ public class CPU implements Runnable{
                     Message message = this.mailbox.get(String.valueOf(pid));
                     if (message == null) {
                         this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.process.pc + "|true");
+                        this.log("[" + pid + "] Fetch " + this.process.pc);
                         this.scheduler.block(this.process);
                         this.process = null;
                     }
@@ -92,7 +93,8 @@ public class CPU implements Runnable{
             //Wait for next clock cycle
             try {
                 Thread.sleep((long) (clockSpeed * 1000));
-            } catch (InterruptedException e) {
+            }
+            catch (InterruptedException e) {
                 return;
             }
         }
