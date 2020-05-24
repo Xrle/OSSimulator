@@ -85,10 +85,6 @@ public class Scheduler implements Runnable {
         }
     }
 
-    private void updateSwappable() {
-
-    }
-
     @Override
     public void run() {
         while (true) {
@@ -165,34 +161,7 @@ public class Scheduler implements Runnable {
                     }
                     break;
 
-                    //drop [pid]
-                    case "drop": {
-                        int pid = Integer.parseInt(command[1]);
-                        PCB process = this.processes.get(pid);
-                        if (this.running == process) {
-                            this.running = null;
-                        }
-                        this.mainQueue.remove(process);
-                        this.priorityQueue.remove(process);
-                        this.blockedQueue.remove(process);
-                        this.swapQueue.remove(process);
-                        this.processes.remove(pid);
-                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "drop|" + pid);
-                        this.log("[SCHEDULER] Dropped PID " + pid);
-                    }
-                    break;
 
-                    //skip [pid]
-                    case "skip": {
-                        int pid = Integer.parseInt(command[1]);
-                        PCB process = this.processes.get(pid);
-                        this.blockedQueue.remove(process);
-                        this.swapQueue.remove(process);
-                        this.loadingQueue.remove(process);
-                        this.mainQueue.add(process);
-                        this.log("[SCHEDULER] Skipped PID " + pid);
-                    }
-                    break;
                 }
             }
 
@@ -240,22 +209,57 @@ public class Scheduler implements Runnable {
                 }
             }
 
-            //Unblock command must be executed after blocking, otherwise the MMU can finish it's operations and unblock
-            //the process before the CPU has been able to block the process, causing errors.
-            //unblock [pid]
+            //Unblock, drop and skip can all be responses to CPU operations, so must execute after it blocks the process
+            //to prevent errors
             if (message != null) {
                 String[] command = message.getCommand();
-                if (command[0].equals("unblock")) {
-                    int pid = Integer.parseInt(command[1]);
-                    PCB process = this.processes.get(pid);
-                    if (this.blockedQueue.contains(process)) {
+                switch (command[0]) {
+                    //unblock [pid]
+                    case "unblock": {
+                        int pid = Integer.parseInt(command[1]);
+                        PCB process = this.processes.get(pid);
+                        if (this.blockedQueue.contains(process)) {
+                            this.blockedQueue.remove(process);
+                            this.priorityQueue.add(process);
+                            this.log("[SCHEDULER] Unblocked PID " + pid);
+                        } else {
+                            this.log("[SCHEDULER/ERROR] Attempted to unblock PID " + pid + ", but it wasn't blocked");
+                        }
+                    }
+                    break;
+
+                    //drop [pid]
+                    case "drop": {
+                        int pid = Integer.parseInt(command[1]);
+                        PCB process = this.processes.get(pid);
+                        if (this.running == process) {
+                            this.running = null;
+                        }
+                        this.mainQueue.remove(process);
+                        this.priorityQueue.remove(process);
                         this.blockedQueue.remove(process);
-                        this.priorityQueue.add(process);
-                        this.log("[SCHEDULER] Unblocked PID " + pid);
+                        this.swapQueue.remove(process);
+                        this.processes.remove(pid);
+                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "drop|" + pid);
+                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.CPU, "drop|" + pid);
+                        this.log("[SCHEDULER] Dropped PID " + pid);
                     }
-                    else {
-                        this.log("[SCHEDULER/ERROR] Attempted to unblock PID " + pid + ", but it wasn't blocked");
+                    break;
+
+                    //skip [pid]
+                    case "skip": {
+                        int pid = Integer.parseInt(command[1]);
+                        PCB process = this.processes.get(pid);
+                        if (this.running == process) {
+                            this.running = null;
+                        }
+                        this.blockedQueue.remove(process);
+                        this.swapQueue.remove(process);
+                        this.loadingQueue.remove(process);
+                        this.mainQueue.add(process);
+                        this.log("[SCHEDULER] Skipped PID " + pid);
                     }
+                    break;
                 }
             }
 

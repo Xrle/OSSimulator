@@ -15,8 +15,9 @@ public class CPU implements Runnable{
     private Mailbox mailbox;
     private ObservableList<String> trace;
     private ObservableList<String> output;
-    private Deque<String[]> dataBuffer;
+    private Deque<String> dataBuffer;
     private Map<Integer, String> instructionCache;
+    private Map<Integer, Map<String, Integer>> varCache;
 
     public CPU(Scheduler scheduler, Mailbox mailbox, double clockSpeed, ObservableList<String> trace, ObservableList<String> output) {
         this.scheduler = scheduler;
@@ -27,6 +28,7 @@ public class CPU implements Runnable{
         this.process = null;
         this.dataBuffer = new ArrayDeque<>();
         this.instructionCache = new HashMap<>();
+        this.varCache = new HashMap<>();
     }
 
     private void output(String message) {
@@ -40,6 +42,26 @@ public class CPU implements Runnable{
     @Override
     public void run() {
         while (true) {
+            //Remove data for any dropped processes
+            {
+                boolean done = false;
+                while (!done) {
+                    Message message = this.mailbox.get(Mailbox.CPU);
+                    if (message != null) {
+                        String[] command = message.getCommand();
+                        if (command[0].equals("drop")) {
+                            int pid = Integer.parseInt(command[1]);
+                            this.instructionCache.remove(pid);
+                            this.varCache.remove(pid);
+                            this.output("[CPU] Dropped PID " + pid);
+                        }
+                    }
+                    else{
+                        done = true;
+                    }
+                }
+            }
+
             //Get a reference to running process
             this.process = this.scheduler.getRunning();
             if (this.process != null) {
@@ -51,9 +73,7 @@ public class CPU implements Runnable{
                     Message message = this.mailbox.get(String.valueOf(pid));
                     if (message == null) {
                         this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.process.pc + "|true");
-                        this.log("[" + pid + "] Fetch " + this.process.pc);
-                        this.scheduler.block(this.process);
-                        this.process = null;
+                        this.block();
                     }
                     else {
                         this.instructionCache.put(pid, message.getCommand()[2]);
@@ -69,7 +89,7 @@ public class CPU implements Runnable{
                         if (message != null) {
                             String[] command = message.getCommand();
                             if (command[0].equals("data")) {
-                                this.dataBuffer.add(new String[] {command[1], command[2]});
+                                this.dataBuffer.add(command[2]);
                                 if (command[3].equals("true")) {
                                     done = true;
                                 }
@@ -81,11 +101,14 @@ public class CPU implements Runnable{
                     }
 
                     //If data was provided execute instruction with it. If not, execution will determine the data needed
+                    String instruction = this.instructionCache.get(pid);
                     if (this.dataBuffer.isEmpty()) {
-                        this.exec(this.instructionCache.get(pid));
+                        this.exec(instruction);
+                        this.log("[" + pid + "/NODATA] " + instruction);
                     }
                     else {
-                        this.execData(this.instructionCache.get(pid), this.dataBuffer);
+                        this.execData(instruction, this.dataBuffer);
+                        this.log("[" + pid + "] " + instruction);
                     }
                 }
             }
@@ -100,11 +123,63 @@ public class CPU implements Runnable{
         }
     }
 
-    private void exec(String instruction) {
-
+    /**
+     * Convert an address referenced by a process to the actual virtual address of that data
+     * @param address Address as seen by the process
+     * @return The corresponding virtual address
+     */
+    private int getRealAddress(int address) {
+        return address + this.process.getCodeLength();
     }
 
-    private void execData(String instruction, Deque<String[]> data) {
+    private void block() {
+        this.scheduler.block(this.process);
+        this.process = null;
+    }
+
+    private void exec(String instruction) {
+        int pid = this.process.getPid();
+        String[] tokens = instruction.split("\\s");
+        switch (tokens[0]) {
+            //var [name] [address]
+            case "var": {
+                //Create a varCache entry for this process
+                if (!this.varCache.containsKey(pid)) {
+                    this.varCache.put(pid, new HashMap<>());
+                }
+                this.varCache.get(pid).put(tokens[1], Integer.valueOf(tokens[2]));
+                this.instructionCache.remove(pid);
+                this.process.pc++;
+            }
+            break;
+
+            //alloc [blocks]
+            case "alloc": {
+                this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "allocate|" + pid + "|" + tokens[1] + "|false");
+                this.instructionCache.remove(pid);
+                this.process.pc++;
+                this.block();
+            }
+            break;
+
+            //free [blocks]
+            case "free": {
+                this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "free|" + pid + "|" + tokens[1] + "|false");
+                this.instructionCache.remove(pid);
+                this.process.pc++;
+            }
+            break;
+
+            //exit
+            case "exit": {
+                this.mailbox.put(Mailbox.CPU, Mailbox.SCHEDULER, "drop|" + pid);
+                this.block();
+            }
+            break;
+        }
+    }
+
+    private void execData(String instruction, Deque<String> data) {
 
     }
 }

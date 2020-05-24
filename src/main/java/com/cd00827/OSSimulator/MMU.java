@@ -158,7 +158,7 @@ public class MMU implements Runnable {
                         else{
                             //Process has caused an error, so drop it
                             this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop|" + pid);
-                            this.log("[MMU/ERROR] PID " + pid + "attempted to free more memory than allocated to it");
+                            this.log("[MMU/ERROR] PID " + pid + " attempted to free more memory than allocated to it");
                         }
                     }
                     break;
@@ -199,7 +199,7 @@ public class MMU implements Runnable {
                         //Drop process if write causes an error
                         else {
                             this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop|" + pid);
-                            this.log("[MMU/ERROR] PID " + pid + "attempted to read from an invalid address");
+                            this.log("[MMU/ERROR] PID " + pid + " attempted to read from an invalid address");
                         }
                     }
                     break;
@@ -219,7 +219,7 @@ public class MMU implements Runnable {
                         }
                         else {
                             this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "drop|" + pid);
-                            this.log("[MMU/ERROR] PID " + pid + "attempted to write to an invalid address");
+                            this.log("[MMU/ERROR] PID " + pid + " attempted to write to an invalid address");
                         }
                     }
                     break;

@@ -12,6 +12,7 @@ public class Mailbox {
     public static final String MMU = "MMU";
     public static final String SCHEDULER = "SCHEDULER";
     public static final String KERNEL = "KERNEL";
+    public static final String CPU = "CPU";
 
     private final ObservableList<Message> log;
     public List<Message> queue;
