@@ -18,6 +18,7 @@ public class CPU implements Runnable{
     private Deque<String> dataBuffer;
     private Map<Integer, String> instructionCache;
     private Map<Integer, Map<String, Integer>> varCache;
+    private Map<Integer, Map<String, Integer>> labelCache;
 
     public CPU(Scheduler scheduler, Mailbox mailbox, double clockSpeed, ObservableList<String> trace, ObservableList<String> output) {
         this.scheduler = scheduler;
@@ -29,6 +30,7 @@ public class CPU implements Runnable{
         this.dataBuffer = new ArrayDeque<>();
         this.instructionCache = new HashMap<>();
         this.varCache = new HashMap<>();
+        this.labelCache = new HashMap<>();
     }
 
     private void output(String message) {
@@ -53,6 +55,7 @@ public class CPU implements Runnable{
                             int pid = Integer.parseInt(command[1]);
                             this.instructionCache.remove(pid);
                             this.varCache.remove(pid);
+                            this.labelCache.remove(pid);
                             this.output("[CPU] Dropped PID " + pid);
                         }
                     }
@@ -100,8 +103,22 @@ public class CPU implements Runnable{
                         }
                     }
 
+                    //Split label from instruction
+                    String instruction;
+                    String[] split = this.instructionCache.get(pid).split(":", 2);
+                    if (!this.labelCache.containsKey(pid)) {
+                        this.labelCache.put(pid, new HashMap<>());
+                    }
+                    try {
+                        //Will throw exception if there is no label on this line
+                        instruction = split[1];
+                        this.labelCache.get(pid).put(split[0], this.process.pc);
+                    }
+                    catch (ArrayIndexOutOfBoundsException e) {
+                        instruction = split[0];
+                    }
+
                     //If data was provided execute instruction with it. If not, execution will determine the data needed
-                    String instruction = this.instructionCache.get(pid);
                     if (this.dataBuffer.isEmpty()) {
                         this.exec(instruction);
                         this.log("[" + pid + "/NODATA] " + instruction);
@@ -137,49 +154,89 @@ public class CPU implements Runnable{
         this.process = null;
     }
 
+    private void drop() {
+        this.mailbox.put(Mailbox.CPU, Mailbox.SCHEDULER, "drop|" + this.process.getPid());
+        this.block();
+    }
+
     private void exec(String instruction) {
-        int pid = this.process.getPid();
-        String[] tokens = instruction.split("\\s");
-        switch (tokens[0]) {
-            //var [name] [address]
-            case "var": {
-                //Create a varCache entry for this process
-                if (!this.varCache.containsKey(pid)) {
-                    this.varCache.put(pid, new HashMap<>());
+        try {
+            int pid = this.process.getPid();
+            String[] tokens = instruction.split("\\s");
+            switch (tokens[0]) {
+                //var [name] [address]
+                case "var": {
+                    //Create a varCache entry for this process
+                    if (!this.varCache.containsKey(pid)) {
+                        this.varCache.put(pid, new HashMap<>());
+                    }
+                    this.varCache.get(pid).put(tokens[1], Integer.valueOf(tokens[2]));
+                    this.instructionCache.remove(pid);
+                    this.process.pc++;
                 }
-                this.varCache.get(pid).put(tokens[1], Integer.valueOf(tokens[2]));
-                this.instructionCache.remove(pid);
-                this.process.pc++;
-            }
-            break;
+                break;
 
-            //alloc [blocks]
-            case "alloc": {
-                this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "allocate|" + pid + "|" + tokens[1] + "|false");
-                this.instructionCache.remove(pid);
-                this.process.pc++;
-                this.block();
-            }
-            break;
+                //alloc [blocks]
+                case "alloc": {
+                    this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "allocate|" + pid + "|" + tokens[1] + "|false");
+                    this.instructionCache.remove(pid);
+                    this.process.pc++;
+                    this.block();
+                }
+                break;
 
-            //free [blocks]
-            case "free": {
-                this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "free|" + pid + "|" + tokens[1] + "|false");
-                this.instructionCache.remove(pid);
-                this.process.pc++;
-            }
-            break;
+                //free [blocks]
+                case "free": {
+                    this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "free|" + pid + "|" + tokens[1] + "|false");
+                    this.instructionCache.remove(pid);
+                    this.process.pc++;
+                }
+                break;
 
-            //exit
-            case "exit": {
-                this.mailbox.put(Mailbox.CPU, Mailbox.SCHEDULER, "drop|" + pid);
-                this.block();
+                //exit
+                case "exit": {
+                    this.drop();
+                }
+                break;
+
+                //jump [label]
+                case "jump": {
+                    try {
+                        this.process.pc = this.labelCache.get(pid).get(tokens[1]);
+                    }
+                    catch (NullPointerException e) {
+                        throw new IllegalArgumentException("Label not defined");
+                    }
+                    this.instructionCache.remove(pid);
+                }
+                break;
+
+                //set [var] [value]
+                case "set": {
+
+                }
+                break;
+
+                default: {
+                    throw new IllegalArgumentException("Invalid instruction");
+                }
             }
-            break;
+        }
+        catch (Exception e) {
+            //Output exception caused by process and drop it
+            this.output("[CPU/ERROR] " + e.getClass().getSimpleName() + " in PID " + this.process.getPid() + " at '" + instruction + "': " + e.getMessage());
+            this.drop();
         }
     }
 
     private void execData(String instruction, Deque<String> data) {
+        try {
 
+        }
+        catch (Exception e) {
+            //Output exception caused by process and drop it
+            this.output("[CPU/ERROR] " + e.getClass().getSimpleName() + " in PID " + this.process.getPid() + " at '" + instruction + "': " + e.getMessage());
+            this.drop();
+        }
     }
 }
