@@ -36,7 +36,7 @@ import java.util.stream.Stream;
  * @author cd00827
  */
 public class MMU implements Runnable {
-    private final Address[] ram;
+    private final String[] ram;
     private final int pageSize;
     private final int pageNumber;
     //Map pid to a map of page number to frame offset
@@ -50,7 +50,7 @@ public class MMU implements Runnable {
     private List<PCB> swappable;
 
     public MMU(int pageSize, int pageNumber, double clockSpeed, Mailbox mailbox, ObservableList<String> log, ReentrantLock swapLock, List<PCB> swappable) {
-        this.ram = new Address[pageSize * pageNumber];
+        this.ram = new String[pageSize * pageNumber];
         this.pageSize = pageSize;
         this.pageNumber = pageNumber;
         this.clockSpeed = clockSpeed;
@@ -188,13 +188,13 @@ public class MMU implements Runnable {
                         if (data[0].equals("success")) {
                             //Unblock process if this was the final read operation
                             if (Boolean.parseBoolean(command[3])) {
-                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data|" + data[1] + "|" + data[2] + "|true");
+                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data|" + data[1] + "|true");
                                 this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock|" + pid);
                             }
                             else {
-                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data|" + data[1] + "|" + data[2] + "|false");
+                                this.mailbox.put(Mailbox.MMU, message.getSender(), "data|" + data[1] + "|false");
                             }
-                            this.log("[MMU] Read '" + data[2] + "' from virtual address " + address + " for PID " + pid);
+                            this.log("[MMU] Read '" + data[1] + "' from virtual address " + address + " for PID " + pid);
                         }
                         //Drop process if write causes an error
                         else {
@@ -204,15 +204,14 @@ public class MMU implements Runnable {
                     }
                     break;
 
-                    //write [pid] [address] [type] [data] [final]
+                    //write [pid] [address] [data] [final]
                     case "write": {
                         int pid = Integer.parseInt(command[1]);
                         int address = Integer.parseInt(command[2]);
-                        String type = command[3];
-                        String data = command[4];
-                        if (this.write(pid, address, type, data)) {
+                        String data = command[3];
+                        if (this.write(pid, address, data)) {
                             //Unblock process if this was the final write operation
-                            if (Boolean.parseBoolean(command[5])) {
+                            if (Boolean.parseBoolean(command[4])) {
                                 this.mailbox.put(Mailbox.MMU, Mailbox.SCHEDULER, "unblock|" + pid);
                             }
                             this.log("[MMU] Wrote '" + data + "' to virtual address " + address + " for PID " + pid);
@@ -249,7 +248,7 @@ public class MMU implements Runnable {
      * Read from a virtual address
      * @param pid PID of process
      * @param address Virtual address to read
-     * @return [status, type, data]<br>
+     * @return [status, data]<br>
      *     Status is either "success" or "error"
      */
     public String[] read(int pid, int address) {
@@ -259,30 +258,29 @@ public class MMU implements Runnable {
         if (this.pageTable.get(pid).containsKey(page)) {
             try {
                 //Return data
-                String[] value = this.ram[this.pageTable.get(pid).get(page) + offset].read();
-                return new String[] {"success", value[0], value[1]};
+                String value = this.ram[this.pageTable.get(pid).get(page) + offset];
+                return new String[] {"success", value};
             }
             //Catch exception if address is null
             catch (NullPointerException e) {
-                return new String[] {"error", "null", "null"};
+                return new String[] {"error", "null"};
             }
         }
-        return new String[] {"error", "null", "null"};
+        return new String[] {"error", "null"};
     }
 
     /**
      * Write to virtual address
      * @param pid PID of process
      * @param address Virtual address to write to
-     * @param type Type of data to write
      * @param data Data to write
      * @return True if successful, false if process does not have access to requested address
      */
-    public boolean write(int pid, int address, String type, String data) {
+    public boolean write(int pid, int address, String data) {
         int page = address / this.pageSize;
         int offset = address % this.pageSize;
         if (this.pageTable.get(pid).containsKey(page)) {
-            this.ram[this.pageTable.get(pid).get(page) + offset] = new Address(type, data);
+            this.ram[this.pageTable.get(pid).get(page) + offset] = data;
             return true;
         }
         return false;
@@ -398,7 +396,7 @@ public class MMU implements Runnable {
             for (Map.Entry<Integer, Integer> page : this.pageTable.get(pid).entrySet()) {
                 for (int i = 0; i < this.pageSize; i++) {
                     if (this.ram[page.getValue() + i] != null) {
-                        writer.write(this.ram[page.getValue() + i].toString());
+                        writer.write(this.ram[page.getValue() + i]);
                     }
                     writer.newLine();
                 }
@@ -440,8 +438,7 @@ public class MMU implements Runnable {
             for (int i = 0; i < blocks; i++) {
                 String line = reader.readLine();
                 if (!line.trim().isEmpty()) {
-                    String[] split = line.split("::", 2);
-                    this.write(pid, i, split[0], split[1]);
+                    this.write(pid, i, line);
                 }
             }
             reader.close();

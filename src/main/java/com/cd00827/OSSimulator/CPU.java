@@ -79,7 +79,7 @@ public class CPU implements Runnable{
                         this.block();
                     }
                     else {
-                        this.instructionCache.put(pid, message.getCommand()[2]);
+                        this.instructionCache.put(pid, message.getCommand()[1]);
                     }
                 }
 
@@ -92,8 +92,8 @@ public class CPU implements Runnable{
                         if (message != null) {
                             String[] command = message.getCommand();
                             if (command[0].equals("data")) {
-                                this.dataBuffer.add(command[2]);
-                                if (command[3].equals("true")) {
+                                this.dataBuffer.add(command[1]);
+                                if (command[2].equals("true")) {
                                     done = true;
                                 }
                             }
@@ -170,7 +170,7 @@ public class CPU implements Runnable{
                     if (!this.varCache.containsKey(pid)) {
                         this.varCache.put(pid, new HashMap<>());
                     }
-                    this.varCache.get(pid).put(tokens[1], Integer.valueOf(tokens[2]));
+                    this.varCache.get(pid).put(tokens[1], this.getRealAddress(Integer.parseInt(tokens[2])));
                     this.instructionCache.remove(pid);
                     this.process.pc++;
                 }
@@ -201,19 +201,34 @@ public class CPU implements Runnable{
 
                 //jump [label]
                 case "jump": {
-                    try {
-                        this.process.pc = this.labelCache.get(pid).get(tokens[1]);
+                    if (this.labelCache.containsKey(pid)) {
+                        if (this.labelCache.get(pid).containsKey(tokens[1])) {
+                            this.process.pc = this.labelCache.get(pid).get(tokens[1]);
+                            this.instructionCache.remove(pid);
+                        }
+                        else {
+                            throw new IllegalArgumentException("Label not defined");
+                        }
                     }
-                    catch (NullPointerException e) {
+                    else {
                         throw new IllegalArgumentException("Label not defined");
                     }
-                    this.instructionCache.remove(pid);
                 }
                 break;
 
                 //set [var] [value]
                 case "set": {
-
+                    if (this.varCache.containsKey(pid)) {
+                        if (this.varCache.get(pid).containsKey(tokens[1])) {
+                            this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "write|" + pid + "|" + this.varCache.get(pid).get(tokens[1]) +  "|" + tokens[2] + "|true");
+                        }
+                        else {
+                            throw new IllegalArgumentException("Variable not defined");
+                        }
+                    }
+                    else {
+                        throw new IllegalArgumentException("Variable not defined");
+                    }
                 }
                 break;
 

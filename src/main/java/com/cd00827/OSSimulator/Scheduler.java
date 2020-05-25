@@ -15,7 +15,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 /**
  * Produces:<br>
- *     MMU => write [pid] [address] [type] [data] [final]<br>
+ *     MMU => write [pid] [address] [data] [final]<br>
  * Consumes:<br>
  *     SCHEDULER => new [path]<br>
  *     SCHEDULER => unblock [pid]<br>
@@ -122,10 +122,10 @@ public class Scheduler implements Runnable {
                                 if (!line.equals("")) {
                                     if (i == process.getCodeLength() - 1) {
                                         //Signal final write operation
-                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write|" + pid + "|" + i + "|" + Address.STRING + "|" + line + "|true");
+                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write|" + pid + "|" + i +  "|" + line + "|true");
                                     }
                                     else {
-                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write|" + pid + "|" + i + "|" + Address.STRING + "|" + line + "|false");
+                                        this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "write|" + pid + "|" + i +  "|" + line + "|false");
                                     }
                                 }
                             }
