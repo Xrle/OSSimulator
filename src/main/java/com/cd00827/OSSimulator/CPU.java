@@ -221,6 +221,9 @@ public class CPU implements Runnable{
                     if (this.varCache.containsKey(pid)) {
                         if (this.varCache.get(pid).containsKey(tokens[1])) {
                             this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "write|" + pid + "|" + this.varCache.get(pid).get(tokens[1]) +  "|" + tokens[2] + "|true");
+                            this.instructionCache.remove(pid);
+                            this.process.pc++;
+                            this.block();
                         }
                         else {
                             throw new IllegalArgumentException("Variable not defined");
