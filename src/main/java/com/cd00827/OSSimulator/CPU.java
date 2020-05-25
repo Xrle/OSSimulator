@@ -3,10 +3,7 @@ package com.cd00827.OSSimulator;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class CPU implements Runnable{
     private PCB process;
@@ -19,6 +16,7 @@ public class CPU implements Runnable{
     private Map<Integer, String> instructionCache;
     private Map<Integer, Map<String, Integer>> varCache;
     private Map<Integer, Map<String, Integer>> labelCache;
+    private List<String> mathVars;
 
     public CPU(Scheduler scheduler, Mailbox mailbox, double clockSpeed, ObservableList<String> trace, ObservableList<String> output) {
         this.scheduler = scheduler;
@@ -159,6 +157,11 @@ public class CPU implements Runnable{
         this.block();
     }
 
+    /**
+     * Execute an instruction.<br>
+     * This method takes no data, so this is either for instructions that don't need data, or for determining what data is required.
+     * @param instruction Instruction to execute
+     */
     private void exec(String instruction) {
         try {
             int pid = this.process.getPid();
@@ -235,6 +238,59 @@ public class CPU implements Runnable{
                 }
                 break;
 
+                //out [var]
+                case "out": {
+                    if (this.varCache.containsKey(pid)) {
+                        if (this.varCache.get(pid).containsKey(tokens[1])) {
+                            this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.varCache.get(pid).get(tokens[1]) +  "|true");
+                            this.block();
+                        }
+                        else {
+                            throw new IllegalArgumentException("Variable not defined");
+                        }
+                    }
+                    else {
+                        throw new IllegalArgumentException("Variable not defined");
+                    }
+                }
+                break;
+
+                //math [expression]
+                case "math": {
+                    this.mathVars = new ArrayList<>();
+                    for (int i = 1; i < tokens.length; i++) {
+                        //Parse brackets
+                        if (tokens[i].matches("(.*)")) {
+                           String[] split = tokens[i].split("\\s");
+                            for (String s : split) {
+                                if (this.varCache.get(pid).containsKey(s)) {
+                                    this.mathVars.add(s);
+                                }
+                            }
+                        }
+                        else {
+                            //End if -> reached
+                            if (tokens[i].equals("->")) {
+                                break;
+                            }
+                            if (this.varCache.get(pid).containsKey(tokens[i])) {
+                                this.mathVars.add(tokens[i]);
+                            }
+                        }
+                    }
+                    //Request data
+                    for (int i = 0; i < this.mathVars.size(); i++) {
+                        if (i == this.mathVars.size() - 1) {
+                            this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.varCache.get(pid).get(this.mathVars.get(i)) +  "|true");
+                        }
+                        else {
+                            this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.varCache.get(pid).get(this.mathVars.get(i)) +  "|false");
+                        }
+                    }
+                    this.block();
+                }
+                break;
+
                 default: {
                     throw new IllegalArgumentException("Invalid instruction");
                 }
@@ -247,9 +303,66 @@ public class CPU implements Runnable{
         }
     }
 
+    /**
+     * Execute an instruction with data.<br>
+     * The code to run once an instruction has requested the required data goes here.
+     * @param instruction Instruction to execute
+     * @param data Data to use in the execution
+     */
     private void execData(String instruction, Deque<String> data) {
         try {
+            int pid = this.process.getPid();
+            String[] tokens = instruction.split("\\s");
+            switch (tokens[0]) {
+                //out [var]
+                case "out": {
+                    this.output("[" + pid + "] " + data.poll());
+                    this.instructionCache.clear();
+                    this.process.pc++;
+                }
+                break;
 
+                case "math": {
+                    //Merge tokens back into one string
+                    StringBuilder builder = new StringBuilder();
+                    for (int i = 1; i < tokens.length; i++) {
+                        builder.append(tokens[i]);
+                    }
+                    String expression = builder.toString().replaceAll("\\s", "");
+
+                    //Sub in data
+                    for (String var : this.mathVars) {
+                        expression = expression.replaceAll(var, Objects.requireNonNull(this.dataBuffer.poll()));
+                    }
+
+                    //Bring out brackets
+                    Deque<String> operations = new ArrayDeque<>();
+                    {
+                        boolean done = false;
+                        while (!done) {
+                            int close = expression.indexOf(")");
+                            int open;
+                            boolean found = false;
+                            int i = 1;
+                            while (!found) {
+                                if (expression.substring(close - i, close - (i+1)).equals("(")) {
+                                    open = close - i;
+                                    operations.add(expression.substring(open + 1, close));
+                                    expression = expression.replace(expression.substring(open, close + 1), "b:"+ operations.size());
+                                    found = true;
+                                }
+                                i--;
+                            }
+                            if (!expression.contains("(")) {
+                                done = true;
+                            }
+                        }
+                    }
+                    //TODO can new poll() queue to eval operations in order, once an operation is done sub answer back in where b:n is.
+                    //TODO check brackets pulled out properly
+                }
+                break;
+            }
         }
         catch (Exception e) {
             //Output exception caused by process and drop it
