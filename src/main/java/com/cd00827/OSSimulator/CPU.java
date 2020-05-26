@@ -167,15 +167,24 @@ public class CPU implements Runnable{
             int pid = this.process.getPid();
             String[] tokens = instruction.split("\\s");
             switch (tokens[0]) {
-                //var [name] [address]
+                //var [name] [address] {value}
                 case "var": {
                     //Create a varCache entry for this process
                     if (!this.varCache.containsKey(pid)) {
                         this.varCache.put(pid, new HashMap<>());
                     }
                     this.varCache.get(pid).put(tokens[1], this.getRealAddress(Integer.parseInt(tokens[2])));
-                    this.instructionCache.remove(pid);
-                    this.process.pc++;
+                    //Optionally assign a value to the variable
+                    if (tokens.length == 4) {
+                        this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "write|" + pid + "|" + this.varCache.get(pid).get(tokens[1]) +  "|" + tokens[3] + "|true");
+                        this.instructionCache.remove(pid);
+                        this.process.pc++;
+                        this.block();
+                    }
+                    else {
+                        this.instructionCache.remove(pid);
+                        this.process.pc++;
+                    }
                 }
                 break;
 
@@ -258,26 +267,24 @@ public class CPU implements Runnable{
                 //math [expression]
                 case "math": {
                     this.mathVars = new ArrayList<>();
+
+                    //Merge tokens back into one string
+                    StringBuilder builder = new StringBuilder();
                     for (int i = 1; i < tokens.length; i++) {
-                        //Parse brackets
-                        if (tokens[i].matches("(.*)")) {
-                           String[] split = tokens[i].split("\\s");
-                            for (String s : split) {
-                                if (this.varCache.get(pid).containsKey(s)) {
-                                    this.mathVars.add(s);
-                                }
-                            }
-                        }
-                        else {
-                            //End if -> reached
-                            if (tokens[i].equals("->")) {
-                                break;
-                            }
-                            if (this.varCache.get(pid).containsKey(tokens[i])) {
-                                this.mathVars.add(tokens[i]);
-                            }
+                        builder.append(tokens[i]);
+                    }
+                    String expression = builder.toString().replaceAll("\\s", "");
+
+                    //Split at brackets and operators
+                    String[] split = expression.split("[()+\\-*/%=]");
+
+                    //Find variables, start at index 1 as index 0 will be the variable to output to
+                    for (int i = 1; i < split.length; i++) {
+                        if (this.varCache.get(pid).containsKey(split[i])) {
+                            this.mathVars.add(split[i]);
                         }
                     }
+
                     //Request data
                     for (int i = 0; i < this.mathVars.size(); i++) {
                         if (i == this.mathVars.size() - 1) {
@@ -329,37 +336,102 @@ public class CPU implements Runnable{
                         builder.append(tokens[i]);
                     }
                     String expression = builder.toString().replaceAll("\\s", "");
+                    String target;
+                    {
+                        String[] split = expression.split("=");
+                        target = split[0];
+                        expression = split[1];
+                    }
 
                     //Sub in data
                     for (String var : this.mathVars) {
                         expression = expression.replaceAll(var, Objects.requireNonNull(this.dataBuffer.poll()));
                     }
 
-                    //Bring out brackets
-                    Deque<String> operations = new ArrayDeque<>();
+                    //Add brackets to list in order they must be evaluated in - inner brackets followed by outer brackets
+                    List<String> operations = new ArrayList<>();
                     {
                         boolean done = false;
                         while (!done) {
+                            //Find the first closing bracket
                             int close = expression.indexOf(")");
                             int open;
                             boolean found = false;
                             int i = 1;
+                            //Go backwards to find the opening bracket
                             while (!found) {
-                                if (expression.substring(close - i, close - (i+1)).equals("(")) {
+                                if (expression.substring(close - i, (close - i) + 1).equals("(")) {
                                     open = close - i;
+                                    //Add contents of brackets to list
                                     operations.add(expression.substring(open + 1, close));
-                                    expression = expression.replace(expression.substring(open, close + 1), "b:"+ operations.size());
+                                    //Replace bracket with b:n where n is the index of the bracket in the list
+                                    expression = expression.replace(expression.substring(open, close + 1), "b:"+ (operations.size() - 1));
                                     found = true;
                                 }
-                                i--;
+                                i++;
                             }
+                            //If there are no more brackets, break loop
                             if (!expression.contains("(")) {
                                 done = true;
                             }
                         }
                     }
-                    //TODO can new poll() queue to eval operations in order, once an operation is done sub answer back in where b:n is.
-                    //TODO check brackets pulled out properly
+
+                    //Add expression as final operation
+                    operations.add(expression);
+
+                    //Evaluate
+                    for (int i = 0; i < operations.size(); i++) {
+                        //Extract operators
+                        Deque<String> operators = new ArrayDeque<>();
+                        for (String s : operations.get(i).split("[^+\\-*/%]")) {
+                            if (!s.equals("")) {
+                                operators.add(s);
+                            }
+                        }
+
+                        //Split at operators
+                        String[] split = operations.get(i).split("[+\\-*/%]");
+                        //Sub in previous operations
+                        for (int j = 0; j < split.length; j++) {
+                            if (split[j].matches("b:[0-9]+")) {
+                                split[j] = operations.get(Integer.parseInt(split[j].split(":")[1]));
+                            }
+                        }
+
+                        //Calculate result
+                        double result = Double.parseDouble(split[0]);
+                        for (int j = 1; j < split.length; j++) {
+                            switch (Objects.requireNonNull(operators.poll())) {
+                                case "+":
+                                    result = result + Double.parseDouble(split[j]);
+                                    break;
+
+                                case "-":
+                                    result = result - Double.parseDouble(split[j]);
+                                    break;
+
+                                case "*":
+                                    result = result * Double.parseDouble(split[j]);
+                                    break;
+
+                                case "/":
+                                    result = result / Double.parseDouble(split[j]);
+                                    break;
+
+                                case "%":
+                                    result = result % Double.parseDouble(split[j]);
+                                    break;
+                            }
+                        }
+                        operations.set(i, String.valueOf(result));
+                    }
+
+                    //Write result to target
+                    this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "write|" + pid + "|" + this.varCache.get(pid).get(target) +  "|" + operations.get(operations.size() - 1) + "|true");
+                    this.instructionCache.remove(pid);
+                    this.process.pc++;
+                    this.block();
                 }
                 break;
             }
