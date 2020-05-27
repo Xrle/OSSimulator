@@ -281,6 +281,30 @@ public class CPU implements Runnable{
                 }
                 break;
 
+                //jumpif [var1] [comparator] [var2/value] [label]
+                case "jumpif": {
+                    if (this.labelCache.containsKey(pid)) {
+                        if (this.labelCache.get(pid).containsKey(tokens[4])) {
+                            //Check if var2 is value
+                            if (this.varCache.get(pid).containsKey(tokens[3])) {
+                                this.readVar(tokens[1], false);
+                                this.readVar(tokens[3], true);
+                            }
+                            else {
+                                this.readVar(tokens[1], true);
+                            }
+                            this.block();
+                        }
+                        else {
+                            throw new IllegalArgumentException("Label not defined");
+                        }
+                    }
+                    else {
+                        throw new IllegalArgumentException("Label not defined");
+                    }
+                }
+                break;
+
                 //set [var] [var/value]
                 case "set": {
                     //Check if setting to a variable
@@ -413,6 +437,84 @@ public class CPU implements Runnable{
                     this.writeVar(tokens[1], data.poll(), true);
                     this.next();
                     this.block();
+                }
+                break;
+
+                //jumpif [var1] [comparator] [var2] [label]
+                case "jumpif": {
+                    //Check if var2 is value
+                    String var1;
+                    String var2;
+                    if (this.varCache.get(pid).containsKey(tokens[3])) {
+                        var1 = Objects.requireNonNull(data.poll());
+                        var2 = Objects.requireNonNull(data.poll());
+                    }
+                    else {
+                        var1 = Objects.requireNonNull(data.poll());
+                        var2 = tokens[3];
+                    }
+
+                    //Compare
+                    switch (tokens[2]) {
+                        case "==": {
+                            if (var1.equals(var2)) {
+                                this.instructionCache.remove(pid);
+                                this.process.pc = this.labelCache.get(pid).get(tokens[4]);
+                            }
+                            else {
+                                this.next();
+                            }
+                        }
+                        break;
+
+                        case ">": {
+                            if (Double.parseDouble(var1) > Double.parseDouble(var2)) {
+                                this.instructionCache.remove(pid);
+                                this.process.pc = this.labelCache.get(pid).get(tokens[4]);
+                            }
+                            else {
+                                this.next();
+                            }
+                        }
+                        break;
+
+                        case "<": {
+                            if (Double.parseDouble(var1) < Double.parseDouble(var2)) {
+                                this.instructionCache.remove(pid);
+                                this.process.pc = this.labelCache.get(pid).get(tokens[4]);
+                            }
+                            else {
+                                this.next();
+                            }
+                        }
+                        break;
+
+                        case ">=": {
+                            if (Double.parseDouble(var1) >= Double.parseDouble(var2)) {
+                                this.instructionCache.remove(pid);
+                                this.process.pc = this.labelCache.get(pid).get(tokens[4]);
+                            }
+                            else {
+                                this.next();
+                            }
+                        }
+                        break;
+
+                        case "<=": {
+                            if (Double.parseDouble(var1) <= Double.parseDouble(var2)) {
+                                this.instructionCache.remove(pid);
+                                this.process.pc = this.labelCache.get(pid).get(tokens[4]);
+                            }
+                            else {
+                                this.next();
+                            }
+                        }
+                        break;
+
+                        default: {
+                            throw new IllegalArgumentException("Invalid comparator: " + tokens[2]);
+                        }
+                    }
                 }
                 break;
 
