@@ -3,6 +3,12 @@ package com.cd00827.OSSimulator;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 public class CPU implements Runnable{
@@ -17,6 +23,7 @@ public class CPU implements Runnable{
     private Map<Integer, Map<String, Integer>> varCache;
     private Map<Integer, Map<String, Integer>> labelCache;
     private List<String> mathVars;
+    private Map<Integer, BufferedWriter> outputs;
 
     public CPU(Scheduler scheduler, Mailbox mailbox, double clockSpeed, ObservableList<String> trace, ObservableList<String> output) {
         this.scheduler = scheduler;
@@ -29,6 +36,7 @@ public class CPU implements Runnable{
         this.instructionCache = new HashMap<>();
         this.varCache = new HashMap<>();
         this.labelCache = new HashMap<>();
+        this.outputs = new HashMap<>();
     }
 
     private void output(String message) {
@@ -54,6 +62,12 @@ public class CPU implements Runnable{
                             this.instructionCache.remove(pid);
                             this.varCache.remove(pid);
                             this.labelCache.remove(pid);
+                            try {
+                                this.outputs.get(pid).close();
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                            this.outputs.remove(pid);
                             this.output("[CPU] Dropped PID " + pid);
                         }
                     }
@@ -181,7 +195,7 @@ public class CPU implements Runnable{
         }
     }
 
-    private void writeVar(String var, String data, boolean last) {
+    private <T> void writeVar(String var, T data, boolean last) {
         if (this.varCache.containsKey(this.process.getPid())) {
             if (this.varCache.get(this.process.getPid()).containsKey(var)) {
                 if (last) {
@@ -267,10 +281,16 @@ public class CPU implements Runnable{
                 }
                 break;
 
-                //set [var] [value]
+                //set [var] [var/value]
                 case "set": {
-                    this.writeVar(tokens[1], tokens[2], true);
-                    this.next();
+                    //Check if setting to a variable
+                    if (this.varCache.get(pid).containsKey(tokens[2])) {
+                        this.readVar(tokens[2], true);
+                    }
+                    else {
+                        this.writeVar(tokens[1], tokens[2], true);
+                        this.next();
+                    }
                     this.block();
                 }
                 break;
@@ -340,8 +360,59 @@ public class CPU implements Runnable{
             switch (tokens[0]) {
                 //out [var]
                 case "out": {
-                    this.output("[" + pid + "] " + data.poll());
+                    //Check output dir exists
+                    File dir = new File("output");
+                    if (!dir.exists()) {
+                        Files.createDirectory(dir.toPath());
+                    }
+                    //Create a new output writer if needed
+                    if (!this.outputs.containsKey(pid)) {
+                        File file;
+                        String[] path = this.process.getCodePath().toString().split("[/\\\\]");
+                        String name = path[path.length - 1];
+                        if (!Files.exists(Path.of("output", name))) {
+                            file = new File("output", name);
+                        }
+                        else {
+                            int count = 1;
+                            while (Files.exists(Path.of("output", name.split("\\.")[0] + "(" + count + ").txt"))) {
+                                count++;
+                            }
+                            file = new File("output", name.split("\\.")[0] + "(" + count + ").txt");
+                        }
+                        this.outputs.put(pid, new BufferedWriter(new FileWriter(file)));
+                    }
+
+                    //Output var to console and to file
+                    String out = Objects.requireNonNull(data.poll());
+                    this.output("[" + pid + "] " + out);
+                    this.outputs.get(pid).write(out);
+                    this.outputs.get(pid).newLine();
                     this.next();
+                }
+                break;
+
+                //inc [var]
+                case "inc": {
+                    this.writeVar(tokens[1], Double.parseDouble(Objects.requireNonNull(data.poll())) + 1, true);
+                    this.next();
+                    this.block();
+                }
+                break;
+
+                //dec [var]
+                case "dec": {
+                    this.writeVar(tokens[1], Double.parseDouble(Objects.requireNonNull(data.poll())) - 1, true);
+                    this.next();
+                    this.block();
+                }
+                break;
+
+                //set [var] [var]
+                case "set": {
+                    this.writeVar(tokens[1], data.poll(), true);
+                    this.next();
+                    this.block();
                 }
                 break;
 
@@ -366,7 +437,7 @@ public class CPU implements Runnable{
 
                     //Add brackets to list in order they must be evaluated in - inner brackets followed by outer brackets
                     List<String> operations = new ArrayList<>();
-                    {
+                    if (expression.contains("(")) {
                         boolean done = false;
                         while (!done) {
                             //Find the first closing bracket
