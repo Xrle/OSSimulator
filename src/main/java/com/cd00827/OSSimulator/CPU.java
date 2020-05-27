@@ -157,6 +157,49 @@ public class CPU implements Runnable{
         this.block();
     }
 
+    private void next() {
+        this.instructionCache.remove(this.process.getPid());
+        this.process.pc++;
+    }
+
+    private void readVar(String var, boolean last) {
+        if (this.varCache.containsKey(this.process.getPid())) {
+            if (this.varCache.get(this.process.getPid()).containsKey(var)) {
+                if (last) {
+                    this.mailbox.put(String.valueOf(this.process.getPid()), Mailbox.MMU, "read|" + this.process.getPid() + "|" + this.varCache.get(this.process.getPid()).get(var) + "|true");
+                }
+                else {
+                    this.mailbox.put(String.valueOf(this.process.getPid()), Mailbox.MMU, "read|" + this.process.getPid() + "|" + this.varCache.get(this.process.getPid()).get(var) + "|false");
+                }
+            }
+            else {
+                throw new IllegalArgumentException("Variable not defined");
+            }
+        }
+        else {
+            throw new IllegalArgumentException("Variable not defined");
+        }
+    }
+
+    private void writeVar(String var, String data, boolean last) {
+        if (this.varCache.containsKey(this.process.getPid())) {
+            if (this.varCache.get(this.process.getPid()).containsKey(var)) {
+                if (last) {
+                    this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "write|" + this.process.getPid() + "|" + this.varCache.get(this.process.getPid()).get(var) +  "|" + data + "|true");
+                }
+                else {
+                    this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "write|" + this.process.getPid() + "|" + this.varCache.get(this.process.getPid()).get(var) +  "|" + data + "|false");
+                }
+            }
+            else {
+                throw new IllegalArgumentException("Variable not defined");
+            }
+        }
+        else {
+            throw new IllegalArgumentException("Variable not defined");
+        }
+    }
+
     /**
      * Execute an instruction.<br>
      * This method takes no data, so this is either for instructions that don't need data, or for determining what data is required.
@@ -176,14 +219,12 @@ public class CPU implements Runnable{
                     this.varCache.get(pid).put(tokens[1], this.getRealAddress(Integer.parseInt(tokens[2])));
                     //Optionally assign a value to the variable
                     if (tokens.length == 4) {
-                        this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "write|" + pid + "|" + this.varCache.get(pid).get(tokens[1]) +  "|" + tokens[3] + "|true");
-                        this.instructionCache.remove(pid);
-                        this.process.pc++;
+                        this.writeVar(tokens[1], tokens[3], true);
+                        this.next();
                         this.block();
                     }
                     else {
-                        this.instructionCache.remove(pid);
-                        this.process.pc++;
+                        this.next();
                     }
                 }
                 break;
@@ -191,8 +232,7 @@ public class CPU implements Runnable{
                 //alloc [blocks]
                 case "alloc": {
                     this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "allocate|" + pid + "|" + tokens[1] + "|false");
-                    this.instructionCache.remove(pid);
-                    this.process.pc++;
+                    this.next();
                     this.block();
                 }
                 break;
@@ -200,8 +240,7 @@ public class CPU implements Runnable{
                 //free [blocks]
                 case "free": {
                     this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "free|" + pid + "|" + tokens[1] + "|false");
-                    this.instructionCache.remove(pid);
-                    this.process.pc++;
+                    this.next();
                 }
                 break;
 
@@ -230,37 +269,20 @@ public class CPU implements Runnable{
 
                 //set [var] [value]
                 case "set": {
-                    if (this.varCache.containsKey(pid)) {
-                        if (this.varCache.get(pid).containsKey(tokens[1])) {
-                            this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "write|" + pid + "|" + this.varCache.get(pid).get(tokens[1]) +  "|" + tokens[2] + "|true");
-                            this.instructionCache.remove(pid);
-                            this.process.pc++;
-                            this.block();
-                        }
-                        else {
-                            throw new IllegalArgumentException("Variable not defined");
-                        }
-                    }
-                    else {
-                        throw new IllegalArgumentException("Variable not defined");
-                    }
+                    this.writeVar(tokens[1], tokens[2], true);
+                    this.next();
+                    this.block();
                 }
                 break;
 
                 //out [var]
-                case "out": {
-                    if (this.varCache.containsKey(pid)) {
-                        if (this.varCache.get(pid).containsKey(tokens[1])) {
-                            this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.varCache.get(pid).get(tokens[1]) +  "|true");
-                            this.block();
-                        }
-                        else {
-                            throw new IllegalArgumentException("Variable not defined");
-                        }
-                    }
-                    else {
-                        throw new IllegalArgumentException("Variable not defined");
-                    }
+                case "out":
+                //inc [var]
+                case "inc":
+                //dec [var]
+                case "dec": {
+                    this.readVar(tokens[1], true);
+                    this.block();
                 }
                 break;
 
@@ -287,12 +309,7 @@ public class CPU implements Runnable{
 
                     //Request data
                     for (int i = 0; i < this.mathVars.size(); i++) {
-                        if (i == this.mathVars.size() - 1) {
-                            this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.varCache.get(pid).get(this.mathVars.get(i)) +  "|true");
-                        }
-                        else {
-                            this.mailbox.put(String.valueOf(pid), Mailbox.MMU, "read|" + pid + "|" + this.varCache.get(pid).get(this.mathVars.get(i)) +  "|false");
-                        }
+                        this.readVar(this.mathVars.get(i), i == this.mathVars.size() - 1);
                     }
                     this.block();
                 }
@@ -324,8 +341,7 @@ public class CPU implements Runnable{
                 //out [var]
                 case "out": {
                     this.output("[" + pid + "] " + data.poll());
-                    this.instructionCache.clear();
-                    this.process.pc++;
+                    this.next();
                 }
                 break;
 
@@ -428,9 +444,8 @@ public class CPU implements Runnable{
                     }
 
                     //Write result to target
-                    this.mailbox.put(Mailbox.CPU, Mailbox.MMU, "write|" + pid + "|" + this.varCache.get(pid).get(target) +  "|" + operations.get(operations.size() - 1) + "|true");
-                    this.instructionCache.remove(pid);
-                    this.process.pc++;
+                    this.writeVar(target, operations.get(operations.size() - 1), true);
+                    this.next();
                     this.block();
                 }
                 break;

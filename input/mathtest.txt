@@ -1,0 +1,8 @@
+alloc 5
+var a 0
+var x 1 7
+var y 2 11
+var z 3 13
+math a = (z - (25*y)) + (x/30)
+out a
+exit
