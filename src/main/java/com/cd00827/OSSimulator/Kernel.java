@@ -69,8 +69,6 @@ public class Kernel implements Initializable {
         else {
             this.fileChooser.setInitialDirectory(dir);
         }
-
-        this.boot();
     }
 
     @FXML
@@ -96,6 +94,7 @@ public class Kernel implements Initializable {
         this.input.getItems().clear();
     }
 
+    @FXML
     private void boot() {
         int pageSize = 5;
         int pageNumber = 5;
@@ -126,11 +125,15 @@ public class Kernel implements Initializable {
         this.stage = stage;
     }
 
+    @FXML
     public void shutdown() {
         if (this.booted) {
             this.mmu.interrupt();
+            this.output.getItems().add("[KERNEL] Stopped MMU");
             this.scheduler.interrupt();
+            this.output.getItems().add("[KERNEL] Stopped scheduler");
             this.cpu.interrupt();
+            this.output.getItems().add("[KERNEL] Stopped CPU");
         }
     }
 }

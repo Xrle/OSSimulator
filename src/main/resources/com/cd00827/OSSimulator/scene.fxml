@@ -10,6 +10,18 @@
             fx:controller="com.cd00827.OSSimulator.Kernel">
 
 
+    <center>
+        <VBox>
+            <HBox>
+
+            </HBox>
+            <HBox>
+                <Button fx:id="boot" text="Boot" onAction="#boot"/>
+                <Button fx:id="shutdown" text="Shutdown" onAction="#shutdown"/>
+            </HBox>
+        </VBox>
+    </center>
+
     <left>
         <VBox>
             <Text text="Input files"/>

@@ -3,10 +3,7 @@ package com.cd00827.OSSimulator;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -83,6 +80,26 @@ public class CPU implements Runnable{
                 int pid = this.process.getPid();
                 this.dataBuffer.clear();
 
+                //Scan process file for labels, in a real system this would be done at compile time.
+                //Compiling the process code is beyond the scope of this simulator, but labels must be loaded here
+                //otherwise attempting to jump to a line that hasn't already been executed will fail
+                if (!this.labelCache.containsKey(pid)) {
+                    this.labelCache.put(pid, new HashMap<>());
+                }
+                File file = new File(this.process.getCodePath().toString());
+                try {
+                    BufferedReader reader = new BufferedReader(new FileReader(file));
+                    for (int i = 0; i < this.process.getCodeLength(); i++) {
+                        String[] split = reader.readLine().split(":", 2);
+                        if (split.length == 2) {
+                            this.labelCache.get(pid).put(split[0], this.process.pc);
+                        }
+                    }
+                    reader.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
                 //If there is no instruction cached, try and pull one from the mailbox, otherwise request a new one
                 if (!this.instructionCache.containsKey(pid)) {
                     Message message = this.mailbox.get(String.valueOf(pid));
@@ -118,13 +135,9 @@ public class CPU implements Runnable{
                     //Split label from instruction
                     String instruction;
                     String[] split = this.instructionCache.get(pid).split(":", 2);
-                    if (!this.labelCache.containsKey(pid)) {
-                        this.labelCache.put(pid, new HashMap<>());
-                    }
                     try {
                         //Will throw exception if there is no label on this line
                         instruction = split[1];
-                        this.labelCache.get(pid).put(split[0], this.process.pc);
                     }
                     catch (ArrayIndexOutOfBoundsException e) {
                         instruction = split[0];
