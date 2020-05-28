@@ -15,7 +15,7 @@ public class MainApp extends Application {
         Parent root = loader.load();
 
         Scene scene = new Scene(root);
-        scene.getStylesheets().add(getClass().getResource("styles.css").toExternalForm());
+        scene.getStylesheets().add(getClass().getResource("bootstrap3.css").toExternalForm());
 
         Kernel kernel = loader.getController();
         kernel.setStage(stage);

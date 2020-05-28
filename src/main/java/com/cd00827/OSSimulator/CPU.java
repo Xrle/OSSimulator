@@ -86,19 +86,19 @@ public class CPU implements Runnable{
                 //TODO check this
                 if (!this.labelCache.containsKey(pid)) {
                     this.labelCache.put(pid, new HashMap<>());
-                }
-                File file = new File(this.process.getCodePath().toString());
-                try {
-                    BufferedReader reader = new BufferedReader(new FileReader(file));
-                    for (int i = 0; i < this.process.getCodeLength(); i++) {
-                        String[] split = reader.readLine().split(":", 2);
-                        if (split.length == 2) {
-                            this.labelCache.get(pid).put(split[0], this.process.pc);
+                    File file = new File(this.process.getCodePath().toString());
+                    try {
+                        BufferedReader reader = new BufferedReader(new FileReader(file));
+                        for (int i = 0; i < this.process.getCodeLength(); i++) {
+                            String[] split = reader.readLine().split(":", 2);
+                            if (split.length == 2) {
+                                this.labelCache.get(pid).put(split[0], i);
+                            }
                         }
+                        reader.close();
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
-                    reader.close();
-                } catch (Exception e) {
-                    e.printStackTrace();
                 }
 
                 //If there is no instruction cached, try and pull one from the mailbox, otherwise request a new one
@@ -467,11 +467,31 @@ public class CPU implements Runnable{
                         var1 = Objects.requireNonNull(data.poll());
                         var2 = tokens[3];
                     }
+                    //If the variable are numbers, format them as doubles
+                    try {
+                        var1 = String.valueOf(Double.parseDouble(var1));
+                    }
+                    catch (Exception ignored) {}
+                    try {
+                        var2 = String.valueOf(Double.parseDouble(var2));
+                    }
+                    catch (Exception ignored) {}
 
                     //Compare
                     switch (tokens[2]) {
                         case "==": {
                             if (var1.equals(var2)) {
+                                this.instructionCache.remove(pid);
+                                this.process.pc = this.labelCache.get(pid).get(tokens[4]);
+                            }
+                            else {
+                                this.next();
+                            }
+                        }
+                        break;
+
+                        case "!=": {
+                            if (!var1.equals(var2)) {
                                 this.instructionCache.remove(pid);
                                 this.process.pc = this.labelCache.get(pid).get(tokens[4]);
                             }
