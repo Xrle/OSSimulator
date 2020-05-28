@@ -10,5 +10,5 @@ out current
 set first second
 set second current
 inc count
-jumpif count == 10 loop
+jumpif count < 10 loop
 exit
