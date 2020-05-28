@@ -2,7 +2,6 @@ package com.cd00827.OSSimulator;
 
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
-import javafx.scene.control.ListView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,5 +38,9 @@ public class Mailbox {
             }
         }
         return message;
+    }
+
+    synchronized void clear() {
+        this.queue.clear();
     }
 }

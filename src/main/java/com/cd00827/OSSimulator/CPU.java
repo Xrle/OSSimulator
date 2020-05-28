@@ -83,6 +83,7 @@ public class CPU implements Runnable{
                 //Scan process file for labels, in a real system this would be done at compile time.
                 //Compiling the process code is beyond the scope of this simulator, but labels must be loaded here
                 //otherwise attempting to jump to a line that hasn't already been executed will fail
+                //TODO check this
                 if (!this.labelCache.containsKey(pid)) {
                     this.labelCache.put(pid, new HashMap<>());
                 }
@@ -146,11 +147,11 @@ public class CPU implements Runnable{
                     //If data was provided execute instruction with it. If not, execution will determine the data needed
                     if (this.dataBuffer.isEmpty()) {
                         this.exec(instruction);
-                        this.log("[" + pid + "/NODATA] " + instruction);
+                        this.log("[" + pid + "] " + instruction);
                     }
                     else {
                         this.execData(instruction, this.dataBuffer);
-                        this.log("[" + pid + "] " + instruction);
+                        this.log("[" + pid + "/DATA] " + instruction);
                     }
                 }
             }

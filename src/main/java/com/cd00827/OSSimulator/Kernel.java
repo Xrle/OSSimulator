@@ -9,11 +9,9 @@ import java.util.List;
 import java.util.ResourceBundle;
 import java.util.concurrent.locks.ReentrantLock;
 
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
-import javafx.scene.layout.GridPane;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -28,11 +26,21 @@ public class Kernel implements Initializable {
     @FXML
     private ListView<Message> mailboxLog;
     @FXML
-    private Button add;
+    private Button boot;
     @FXML
-    private Button remove;
+    private Button shutdown;
     @FXML
-    private Button execute;
+    private TextField pageSize;
+    @FXML
+    private TextField pageNumber;
+    @FXML
+    private TextField memoryClock;
+    @FXML
+    private TextField quantum;
+    @FXML
+    private TextField schedulerClock;
+    @FXML
+    private TextField cpuClock;
 
     private Stage stage;
     private Mailbox mailbox;
@@ -43,16 +51,22 @@ public class Kernel implements Initializable {
     private FileChooser fileChooser;
     private ReentrantLock swapLock;
     private List<PCB> swappable;
-    private PCB running;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
+        this.shutdown.setDisable(true);
         this.mailbox = new Mailbox(this.mailboxLog.getItems());
         this.fileChooser = new FileChooser();
         this.fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
         this.input.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         this.swapLock = new ReentrantLock();
         this.swappable = new ArrayList<>();
+        this.pageSize.textProperty().addListener(new IntChecker(this.pageSize.textProperty()));
+        this.pageNumber.textProperty().addListener(new IntChecker(this.pageNumber.textProperty()));
+        this.memoryClock.textProperty().addListener(new DoubleChecker(this.memoryClock.textProperty()));
+        this.quantum.textProperty().addListener(new IntChecker(this.quantum.textProperty()));
+        this.schedulerClock.textProperty().addListener(new DoubleChecker(this.schedulerClock.textProperty()));
+        this.cpuClock.textProperty().addListener(new DoubleChecker(this.cpuClock.textProperty()));
 
         //Set up input directory
         File dir = new File("input");
@@ -94,31 +108,60 @@ public class Kernel implements Initializable {
         this.input.getItems().clear();
     }
 
+    private boolean bootValidator() {
+        if (this.pageSize.getText().equals("")) {
+            return false;
+        }
+        if (this.pageNumber.getText().equals("")) {
+            return false;
+        }
+        if (this.memoryClock.getText().equals("")) {
+            return false;
+        }
+        if (this.quantum.getText().equals("")) {
+            return false;
+        }
+        if (this.schedulerClock.getText().equals("")) {
+            return false;
+        }
+        if (this.cpuClock.getText().equals("")) {
+            return false;
+        }
+        return true;
+    }
+
     @FXML
     private void boot() {
-        int pageSize = 5;
-        int pageNumber = 5;
-        double memoryClock = 1;
+        if (this.bootValidator()) {
+            int pageSize = Integer.parseInt(this.pageSize.getText());
+            int pageNumber = Integer.parseInt(this.pageNumber.getText());
+            double memoryClock = Double.parseDouble(this.memoryClock.getText());
+            this.mmu = new Thread(new MMU(pageSize, pageNumber, memoryClock, this.mailbox, this.output.getItems(), this.swapLock, this.swappable));
+            this.mmu.start();
+            this.output.getItems().add("[KERNEL] Started MMU with " + pageNumber + " " + pageSize + " block pages (" + pageNumber * pageSize + " blocks physical RAM) at clock speed " + memoryClock + "ops/s");
 
-        this.mmu = new Thread(new MMU(pageSize, pageNumber, memoryClock, this.mailbox, this.output.getItems(), this.swapLock, this.swappable));
-        this.mmu.start();
-        this.output.getItems().add("[KERNEL] Started MMU with " + pageNumber + " " + pageSize + " block pages (" + pageNumber*pageSize + " blocks physical RAM) at clock speed " + memoryClock + "ops/s");
+            double schedulerClock = Double.parseDouble(this.schedulerClock.getText());
+            int quantum = Integer.parseInt(this.quantum.getText());
 
-        double schedulerClock = 1.5;
-        int quantum = 5;
+            Scheduler schedulerInstance = new Scheduler(schedulerClock, this.mailbox, quantum, this.output.getItems(), this.swapLock, this.swappable);
+            this.scheduler = new Thread(schedulerInstance);
+            this.scheduler.start();
+            this.output.getItems().add("[KERNEL] Started scheduler with quantum " + quantum + " at " + schedulerClock + "ops/s");
 
-        Scheduler schedulerInstance = new Scheduler(schedulerClock, this.mailbox, quantum, this.output.getItems(), this.swapLock, this.swappable);
-        this.scheduler = new Thread(schedulerInstance);
-        this.scheduler.start();
-        this.output.getItems().add("[KERNEL] Started scheduler with quantum " + quantum + " at " + schedulerClock + "op/s");
+            double cpuClock = Double.parseDouble(this.cpuClock.getText());
 
-        double cpuClock = 1.2;
+            this.cpu = new Thread(new CPU(schedulerInstance, this.mailbox, cpuClock, this.execTrace.getItems(), this.output.getItems()));
+            this.cpu.start();
+            this.output.getItems().add("[KERNEL] Started CPU at " + cpuClock + "ops/s");
 
-        this.cpu = new Thread(new CPU(schedulerInstance, this.mailbox, cpuClock, this.execTrace.getItems(), this.output.getItems()));
-        this.cpu.start();
-        this.output.getItems().add("[KERNEL] Started CPU at " + cpuClock + "op/s");
-
-        this.booted = true;
+            this.booted = true;
+            this.boot.setDisable(true);
+            this.shutdown.setDisable(false);
+        }
+        else {
+            Alert alert = new Alert(Alert.AlertType.ERROR, "One or more fields left empty");
+            alert.show();
+        }
     }
 
     public void setStage(Stage stage) {
@@ -134,6 +177,9 @@ public class Kernel implements Initializable {
             this.output.getItems().add("[KERNEL] Stopped scheduler");
             this.cpu.interrupt();
             this.output.getItems().add("[KERNEL] Stopped CPU");
+            this.mailbox.clear();
+            this.boot.setDisable(false);
+            this.shutdown.setDisable(true);
         }
     }
 }
