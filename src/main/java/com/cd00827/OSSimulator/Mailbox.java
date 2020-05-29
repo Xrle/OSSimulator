@@ -42,5 +42,6 @@ public class Mailbox {
 
     synchronized void clear() {
         this.queue.clear();
+        Platform.runLater(this.log::clear);
     }
 }

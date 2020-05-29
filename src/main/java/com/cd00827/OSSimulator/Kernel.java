@@ -136,6 +136,7 @@ public class Kernel implements Initializable {
             int pageSize = Integer.parseInt(this.pageSize.getText());
             int pageNumber = Integer.parseInt(this.pageNumber.getText());
             double memoryClock = Double.parseDouble(this.memoryClock.getText());
+
             this.mmu = new Thread(new MMU(pageSize, pageNumber, memoryClock, this.mailbox, this.output.getItems(), this.swapLock, this.swappable));
             this.mmu.start();
             this.output.getItems().add("[KERNEL] Started MMU with " + pageNumber + " " + pageSize + " block pages (" + pageNumber * pageSize + " blocks physical RAM) at clock speed " + memoryClock + "ops/s");
@@ -181,5 +182,12 @@ public class Kernel implements Initializable {
             this.boot.setDisable(false);
             this.shutdown.setDisable(true);
         }
+    }
+
+    @FXML
+    private void endOfLog() {
+        this.output.scrollTo(this.output.getItems().size() - 1);
+        this.mailboxLog.scrollTo(this.mailboxLog.getItems().size() - 1);
+        this.execTrace.scrollTo(this.execTrace.getItems().size() - 1);
     }
 }

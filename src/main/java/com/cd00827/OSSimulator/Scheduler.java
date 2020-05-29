@@ -28,21 +28,21 @@ import java.util.stream.Stream;
  * @author cd00827
  **/
 public class Scheduler implements Runnable {
-    private Deque<PCB> mainQueue;
-    private Deque<PCB> priorityQueue;
-    private Deque<PCB> blockedQueue;
-    private Deque<PCB> swapQueue;
-    private Deque<PCB> loadingQueue;
+    private final Deque<PCB> mainQueue;
+    private final Deque<PCB> priorityQueue;
+    private final Deque<PCB> blockedQueue;
+    private final Deque<PCB> swapQueue;
+    private final Deque<PCB> loadingQueue;
     private PCB running;
-    private Map<Integer, PCB> processes;
+    private final Map<Integer, PCB> processes;
 
-    private Mailbox mailbox;
-    private double clockSpeed;
-    private int quantum;
+    private final Mailbox mailbox;
+    private final double clockSpeed;
+    private final int quantum;
     private final ObservableList<String> log;
-    private ReentrantLock swapLock;
-    private SynchronousQueue<PCB> blockRendezvous;
-    private List<PCB> swappable;
+    private final ReentrantLock swapLock;
+    private final SynchronousQueue<PCB> blockRendezvous;
+    private final List<PCB> swappable;
 
     public Scheduler(double clockSpeed, Mailbox mailbox, int quantum, ObservableList<String> log, ReentrantLock swapLock, List<PCB> swappable) {
         this.clockSpeed = clockSpeed;
@@ -268,7 +268,7 @@ public class Scheduler implements Runnable {
 
             //Wait for next clock cycle
             try {
-                Thread.sleep((long)(clockSpeed * 1000));
+                Thread.sleep((long)((1/clockSpeed) * 1000));
             }
             catch (InterruptedException e) {
                 return;

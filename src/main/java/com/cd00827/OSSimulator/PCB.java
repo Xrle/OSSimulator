@@ -3,12 +3,12 @@ package com.cd00827.OSSimulator;
 import java.nio.file.Path;
 
 public class PCB {
-    private int pid;
+    private final int pid;
     private int codeLength;
-    private Path codePath;
+    private final Path codePath;
     private boolean loaded;
     private boolean swapped;
-    private int quantum;
+    private final int quantum;
     private int timeLeft;
     public int pc;
 

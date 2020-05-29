@@ -7,8 +7,6 @@ import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -46,8 +44,8 @@ public class MMU implements Runnable {
     private final Mailbox mailbox;
     private final double clockSpeed;
     private final ObservableList<String> log;
-    private ReentrantLock swapLock;
-    private List<PCB> swappable;
+    private final ReentrantLock swapLock;
+    private final List<PCB> swappable;
 
     public MMU(int pageSize, int pageNumber, double clockSpeed, Mailbox mailbox, ObservableList<String> log, ReentrantLock swapLock, List<PCB> swappable) {
         this.ram = new String[pageSize * pageNumber];
@@ -236,7 +234,7 @@ public class MMU implements Runnable {
 
             //Wait for next clock cycle
             try {
-                Thread.sleep((long)(clockSpeed * 1000));
+                Thread.sleep((long)((1/clockSpeed) * 1000));
             }
             catch (InterruptedException e) {
                 return;
@@ -366,6 +364,10 @@ public class MMU implements Runnable {
         //Free pages from most to least recently allocated
         int size = this.pageTable.get(pid).size();
         for (int i = 1; i <= pages; i++) {
+            //Clear memory to prevent bugs when executing code from reused parts of memory
+            for (int j = 0; j < this.pageSize; j++) {
+                this.ram[this.pageTable.get(pid).get(size - i) + j] = null;
+            }
             this.frameAllocationRecord.put(this.pageTable.get(pid).get(size - i), false);
             this.pageTable.get(pid).remove(size - i);
         }

@@ -10,17 +10,17 @@ import java.util.*;
 
 public class CPU implements Runnable{
     private PCB process;
-    private Scheduler scheduler;
-    private double clockSpeed;
-    private Mailbox mailbox;
-    private ObservableList<String> trace;
-    private ObservableList<String> output;
-    private Deque<String> dataBuffer;
-    private Map<Integer, String> instructionCache;
-    private Map<Integer, Map<String, Integer>> varCache;
-    private Map<Integer, Map<String, Integer>> labelCache;
+    private final Scheduler scheduler;
+    private final double clockSpeed;
+    private final Mailbox mailbox;
+    private final ObservableList<String> trace;
+    private final ObservableList<String> output;
+    private final Deque<String> dataBuffer;
+    private final Map<Integer, String> instructionCache;
+    private final Map<Integer, Map<String, Integer>> varCache;
+    private final Map<Integer, Map<String, Integer>> labelCache;
     private List<String> mathVars;
-    private Map<Integer, BufferedWriter> outputs;
+    private final Map<Integer, BufferedWriter> outputs;
 
     public CPU(Scheduler scheduler, Mailbox mailbox, double clockSpeed, ObservableList<String> trace, ObservableList<String> output) {
         this.scheduler = scheduler;
@@ -61,9 +61,7 @@ public class CPU implements Runnable{
                             this.labelCache.remove(pid);
                             try {
                                 this.outputs.get(pid).close();
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
+                            } catch (Exception ignored) {}
                             this.outputs.remove(pid);
                             this.output("[CPU] Dropped PID " + pid);
                         }
@@ -158,7 +156,7 @@ public class CPU implements Runnable{
 
             //Wait for next clock cycle
             try {
-                Thread.sleep((long) (clockSpeed * 1000));
+                Thread.sleep((long) ((1/clockSpeed) * 1000));
             }
             catch (InterruptedException e) {
                 return;
@@ -238,6 +236,12 @@ public class CPU implements Runnable{
             int pid = this.process.getPid();
             String[] tokens = instruction.split("\\s");
             switch (tokens[0]) {
+                //Empty line
+                case "null": {
+                    this.next();
+                }
+                break;
+
                 //var [name] [address] {value}
                 case "var": {
                     //Create a varCache entry for this process
@@ -380,6 +384,7 @@ public class CPU implements Runnable{
         }
         catch (Exception e) {
             //Output exception caused by process and drop it
+            e.printStackTrace();
             this.output("[CPU/ERROR] " + e.getClass().getSimpleName() + " in PID " + this.process.getPid() + " at '" + instruction + "': " + e.getMessage());
             this.drop();
         }
@@ -660,6 +665,7 @@ public class CPU implements Runnable{
         }
         catch (Exception e) {
             //Output exception caused by process and drop it
+            e.printStackTrace();
             this.output("[CPU/ERROR] " + e.getClass().getSimpleName() + " in PID " + this.process.getPid() + " at '" + instruction + "': " + e.getMessage());
             this.drop();
         }
