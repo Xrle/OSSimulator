@@ -185,7 +185,7 @@ public class Kernel implements Initializable {
     }
 
     @FXML
-    private void endOfLog() {
+    private void autoscroll() {
         this.output.scrollTo(this.output.getItems().size() - 1);
         this.mailboxLog.scrollTo(this.mailboxLog.getItems().size() - 1);
         this.execTrace.scrollTo(this.execTrace.getItems().size() - 1);

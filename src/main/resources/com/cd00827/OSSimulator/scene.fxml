@@ -74,7 +74,7 @@
             <VBox>
                 <Text text="Mailbox"/>
                 <ListView fx:id="mailboxLog"/>
-                <Button text="Jump to end" onAction="#endOfLog"/>
+                <Button text="Autoscroll" onAction="#autoscroll"/>
             </VBox>
             <VBox>
                 <Text text="Execution trace"/>

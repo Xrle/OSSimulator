@@ -1,6 +1,6 @@
 alloc 4
 var primes 0 0
-var current 1 0
+var current 1 1
 var count 2
 var x 3
 

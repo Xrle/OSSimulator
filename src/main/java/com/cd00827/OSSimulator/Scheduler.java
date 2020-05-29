@@ -14,17 +14,8 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 /**
- * Produces:<br>
- *     MMU => write [pid] [address] [data] [final]<br>
- * Consumes:<br>
- *     SCHEDULER => new [path]<br>
- *     SCHEDULER => unblock [pid]<br>
- *     SCHEDULER => swappedOut [pid]<br>
- *     SCHEDULER => swappedIn [pid]<br>
- *     SCHEDULER => skip [pid]<br>
- *     SCHEDULER => drop [pid]<br>
- *     SCHEDULER => allocated [pid]<br>
- *
+ * Process scheduler, uses a combination of a round robin and multi-level feedback queues to schedule the execution of
+ * multiple processes concurrently
  * @author cd00827
  **/
 public class Scheduler implements Runnable {
@@ -44,6 +35,16 @@ public class Scheduler implements Runnable {
     private final SynchronousQueue<PCB> blockRendezvous;
     private final List<PCB> swappable;
 
+    /**
+     * Constructor
+     *
+     * @param clockSpeed Number of operations this scheduler should perform per second
+     * @param mailbox The mailbox to get and put commands to
+     * @param quantum Number of cycles before switching to another process
+     * @param log Log to output to
+     * @param swapLock Lock used for synchronising the scheduler and MMU when swapping
+     * @param swappable List to store currently swappable processes in
+     */
     public Scheduler(double clockSpeed, Mailbox mailbox, int quantum, ObservableList<String> log, ReentrantLock swapLock, List<PCB> swappable) {
         this.clockSpeed = clockSpeed;
         this.mailbox = mailbox;
@@ -85,6 +86,9 @@ public class Scheduler implements Runnable {
         }
     }
 
+    /**
+     * Entry point when starting the scheduler thread
+     */
     @Override
     public void run() {
         while (true) {
@@ -116,6 +120,7 @@ public class Scheduler implements Runnable {
                         int pid = Integer.parseInt(command[1]);
                         PCB process = this.processes.get(pid);
                         try {
+                            //Load process code into memory
                             BufferedReader reader = new BufferedReader(new FileReader(new File(String.valueOf(process.getCodePath()))));
                             for (int i = 0; i < process.getCodeLength(); i++) {
                                 String line = reader.readLine();
