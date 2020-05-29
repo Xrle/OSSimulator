@@ -1,0 +1,5 @@
+alloc 50
+var x 49 test
+free 50
+out x
+exit

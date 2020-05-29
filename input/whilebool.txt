@@ -1,0 +1,11 @@
+alloc 2
+var bool 0 false
+var count 1 0
+loop:jumpif bool == true end
+inc count
+out bool
+jumpif count < 10 loop
+set bool true
+jump loop
+end:out bool
+exit

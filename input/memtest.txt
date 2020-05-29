@@ -1,0 +1,9 @@
+alloc 3
+var x 0 testing
+var y 1 memory
+var z 2 access
+out x
+out y
+out z
+free 3
+exit

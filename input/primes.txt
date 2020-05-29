@@ -1,0 +1,23 @@
+alloc 4
+var primes 0 0
+var current 1 0
+var count 2
+var x 3
+
+main:set count 0
+inc current
+
+loop:math x = current%count
+jumpif x == 0 divisible
+continue:inc count
+jumpif count > current yes
+jump loop
+
+divisible:jumpif count == 1 continue
+jumpif count == current continue
+jump main
+
+yes:out current
+inc primes
+jumpif primes < 10 main
+exit

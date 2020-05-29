@@ -1,0 +1,14 @@
+alloc 2
+var x 0 0
+var count 1 0
+out x
+incloop:inc x
+out x
+inc count
+jumpif count < 10 incloop
+set count 0
+decloop:dec x
+out x
+inc count
+jumpif count < 10 decloop
+exit

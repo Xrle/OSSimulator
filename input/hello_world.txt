@@ -1,0 +1,4 @@
+alloc 1
+var x 0 hello_world
+out x
+exit

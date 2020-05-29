@@ -1,0 +1,8 @@
+alloc 4
+var a 0
+var x 1 2
+var y 2 5
+var z 3 10
+math a = (x/y) - 5 + ((10*z)%(x+y))
+out a
+exit
