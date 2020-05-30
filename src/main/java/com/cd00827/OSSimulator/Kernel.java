@@ -57,8 +57,8 @@ public class Kernel implements Initializable {
 
     /**
      * Called when the JavaFX application loads the kernel
-     * @param url
-     * @param rb
+     * @param url URL
+     * @param rb ResourceBundle
      */
     @Override
     public void initialize(URL url, ResourceBundle rb) {

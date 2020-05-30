@@ -42,6 +42,7 @@ public class PCB {
 
     /**
      * Set the length of this process's code
+     * @param codeLength Length of this process' code
      */
     public void setCodeLength(int codeLength) {
         this.codeLength = codeLength;
