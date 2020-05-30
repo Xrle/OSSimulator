@@ -15,8 +15,11 @@ import javafx.scene.control.*;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+/**
+ * Kernel, handles GUI events and configures/runs the simulator
+ * @author cd00827
+ */
 public class Kernel implements Initializable {
-
     @FXML
     private ListView<InputFile> input;
     @FXML
@@ -52,6 +55,11 @@ public class Kernel implements Initializable {
     private ReentrantLock swapLock;
     private List<PCB> swappable;
 
+    /**
+     * Called when the JavaFX application loads the kernel
+     * @param url
+     * @param rb
+     */
     @Override
     public void initialize(URL url, ResourceBundle rb) {
         this.shutdown.setDisable(true);
@@ -85,6 +93,9 @@ public class Kernel implements Initializable {
         }
     }
 
+    /**
+     * Add an input file to the simulator
+     */
     @FXML
     private void addFile() {
         List<File> files = this.fileChooser.showOpenMultipleDialog(this.stage);
@@ -95,11 +106,17 @@ public class Kernel implements Initializable {
         }
     }
 
+    /**
+     * Remove an input file from the simulator
+     */
     @FXML
     private void removeFile() {
         this.input.getItems().removeAll(this.input.getSelectionModel().getSelectedItems());
     }
 
+    /**
+     * Execute selected input files
+     */
     @FXML
     private void execute() {
         for (InputFile file : this.input.getItems()) {
@@ -108,6 +125,10 @@ public class Kernel implements Initializable {
         this.input.getItems().clear();
     }
 
+    /**
+     * Validate the given boot parameters
+     * @return True if valid parameters have been given
+     */
     private boolean bootValidator() {
         if (this.pageSize.getText().equals("")) {
             return false;
@@ -130,6 +151,9 @@ public class Kernel implements Initializable {
         return true;
     }
 
+    /**
+     * Start the simulator
+     */
     @FXML
     private void boot() {
         if (this.bootValidator()) {
@@ -165,10 +189,17 @@ public class Kernel implements Initializable {
         }
     }
 
+    /**
+     * Set the stage that initialized this kernel, required for passing to the file dialog window
+     * @param stage Stage
+     */
     public void setStage(Stage stage) {
         this.stage = stage;
     }
 
+    /**
+     * Stop the simulator
+     */
     @FXML
     public void shutdown() {
         if (this.booted) {
@@ -184,6 +215,9 @@ public class Kernel implements Initializable {
         }
     }
 
+    /**
+     * Scroll to the bottom of all the logs, and enable them to autoscroll
+     */
     @FXML
     private void autoscroll() {
         this.output.scrollTo(this.output.getItems().size() - 1);

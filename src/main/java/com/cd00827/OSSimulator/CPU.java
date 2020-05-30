@@ -8,7 +8,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-public class CPU implements Runnable{
+/**
+ * CPU, executes instructions for a process provided to it by the scheduler.<br>
+ * Each cycle, the CPU will either execute an instruction, or get the data required from memory to execute the current
+ * instruction
+ * @author cd00827
+ */
+public class CPU implements Runnable {
     private PCB process;
     private final Scheduler scheduler;
     private final double clockSpeed;
@@ -16,12 +22,24 @@ public class CPU implements Runnable{
     private final ObservableList<String> trace;
     private final ObservableList<String> output;
     private final Deque<String> dataBuffer;
+    //Cache of each process's current instruction
     private final Map<Integer, String> instructionCache;
+    //Cache of each process's defined variables
     private final Map<Integer, Map<String, Integer>> varCache;
+    //Cache of each process's defined labels
     private final Map<Integer, Map<String, Integer>> labelCache;
     private List<String> mathVars;
+    //The BufferedWriter each process uses to write its outputs to a file
     private final Map<Integer, BufferedWriter> outputs;
 
+    /**
+     * Constructor
+     * @param scheduler Reference to scheduler governing this CPU
+     * @param mailbox Mailbox to control this CPU with
+     * @param clockSpeed Number of instructions to execute per second
+     * @param trace Log to output the execution trace to
+     * @param output Log to output messages and the result of processes to
+     */
     public CPU(Scheduler scheduler, Mailbox mailbox, double clockSpeed, ObservableList<String> trace, ObservableList<String> output) {
         this.scheduler = scheduler;
         this.mailbox = mailbox;
@@ -36,14 +54,25 @@ public class CPU implements Runnable{
         this.outputs = new HashMap<>();
     }
 
+    /**
+     * Write a message to the output log
+     * @param message Message
+     */
     private void output(String message) {
         Platform.runLater(() -> this.output.add(message));
     }
+
+    /**
+     * Write a message to the execution trace
+     * @param message Message
+     */
     private void log(String message) {
         Platform.runLater(() -> this.trace.add(message));
     }
 
-
+    /**
+     * Entry point when starting the CPU thread
+     */
     @Override
     public void run() {
         while (true) {
@@ -81,7 +110,6 @@ public class CPU implements Runnable{
                 //Scan process file for labels, in a real system this would be done at compile time.
                 //Compiling the process code is beyond the scope of this simulator, but labels must be loaded here
                 //otherwise attempting to jump to a line that hasn't already been executed will fail
-                //TODO check this
                 if (!this.labelCache.containsKey(pid)) {
                     this.labelCache.put(pid, new HashMap<>());
                     File file = new File(this.process.getCodePath().toString());
@@ -173,21 +201,35 @@ public class CPU implements Runnable{
         return address + this.process.getCodeLength();
     }
 
+    /**
+     * Block the current process
+     */
     private void block() {
         this.scheduler.block(this.process);
         this.process = null;
     }
 
+    /**
+     * Drop the current process
+     */
     private void drop() {
         this.mailbox.put(Mailbox.CPU, Mailbox.SCHEDULER, "drop|" + this.process.getPid());
         this.block();
     }
 
+    /**
+     * Go to the next instruction
+     */
     private void next() {
         this.instructionCache.remove(this.process.getPid());
         this.process.pc++;
     }
 
+    /**
+     * Read a variable from memory
+     * @param var Variable
+     * @param last True if this is the last in a series of read operations
+     */
     private void readVar(String var, boolean last) {
         if (this.varCache.containsKey(this.process.getPid())) {
             if (this.varCache.get(this.process.getPid()).containsKey(var)) {
@@ -207,6 +249,13 @@ public class CPU implements Runnable{
         }
     }
 
+    /**
+     * Write to the memory location of a variable
+     * @param var Variable
+     * @param data Data to write
+     * @param last True if this is the last in a series of write operations
+     * @param <T> Type of the data being written, will be converted to a String
+     */
     private <T> void writeVar(String var, T data, boolean last) {
         if (this.varCache.containsKey(this.process.getPid())) {
             if (this.varCache.get(this.process.getPid()).containsKey(var)) {
@@ -557,6 +606,7 @@ public class CPU implements Runnable{
                 }
                 break;
 
+                //math [expression]
                 case "math": {
                     //Merge tokens back into one string
                     StringBuilder builder = new StringBuilder();

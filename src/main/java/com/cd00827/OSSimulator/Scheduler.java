@@ -13,6 +13,7 @@ import java.util.*;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
+
 /**
  * Process scheduler, uses a combination of a round robin and multi-level feedback queues to schedule the execution of
  * multiple processes concurrently
@@ -37,11 +38,10 @@ public class Scheduler implements Runnable {
 
     /**
      * Constructor
-     *
      * @param clockSpeed Number of operations this scheduler should perform per second
-     * @param mailbox The mailbox to get and put commands to
+     * @param mailbox The mailbox to control this scheduler with
      * @param quantum Number of cycles before switching to another process
-     * @param log Log to output to
+     * @param log Log to output messages to
      * @param swapLock Lock used for synchronising the scheduler and MMU when swapping
      * @param swappable List to store currently swappable processes in
      */
@@ -62,10 +62,18 @@ public class Scheduler implements Runnable {
         this.blockRendezvous = new SynchronousQueue<>();
     }
 
+    /**
+     * Write a message to the log
+     * @param message Message
+     */
     private void log(String message) {
         Platform.runLater(() -> this.log.add(message));
     }
 
+    /**
+     * Get a reference to the currently running process
+     * @return Currently running process
+     */
     public PCB getRunning() {
         return this.running;
     }
@@ -179,12 +187,12 @@ public class Scheduler implements Runnable {
                     this.mainQueue.add(this.running);
                     //Set running to null to prevent processes duplicating
                     this.running = null;
-                    switchProcess();
+                    this.switchProcess();
                 }
             }
             //Otherwise attempt to run a process
             else {
-                switchProcess();
+                this.switchProcess();
             }
 
             //Update list of swappable processes
@@ -281,6 +289,9 @@ public class Scheduler implements Runnable {
         }
     }
 
+    /**
+     * Switch to the next process
+     */
     private void switchProcess() {
         //Move a process from main queue to priority queue if priority queue is empty
         if (this.priorityQueue.isEmpty() && !this.mainQueue.isEmpty()) {
@@ -308,12 +319,13 @@ public class Scheduler implements Runnable {
             //Load process file
             else {
                 //Attempt to allocate memory
-                //Get required memory
                 try {
+                    //Get required memory
                     Stream<String> stream = Files.lines(process.getCodePath());
                     int blocks = (int) stream.count();
                     stream.close();
                     process.setCodeLength(blocks);
+                    //Allocate
                     this.mailbox.put(Mailbox.SCHEDULER, Mailbox.MMU, "allocate|" + process.getPid() + "|" + blocks + "|true");
                     this.loadingQueue.add(process);
                     this.log("[SCHEDULER] Waiting for PID " + process.getPid() + " to be loaded from file");

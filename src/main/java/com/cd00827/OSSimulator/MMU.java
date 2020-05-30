@@ -13,23 +13,7 @@ import java.util.stream.Stream;
  * Memory management unit.<br>
  * Maintains an array representing physical RAM, and allocates memory to processes using a paging system.
  * Allows for processes to be swapped out to text files when memory is full.
- * Provides read and write access to memory.<br>
- * Produces:<br>
- *     SCHEDULER => unblock [pid]<br>
- *     SCHEDULER => swappedOut [pid]<br>
- *     SCHEDULER => swappedIn [pid]<br>
- *     SCHEDULER => skip [pid]<br>
- *     SCHEDULER => drop [pid]<br>
- *     SCHEDULER => allocated [pid]<br>
- *     [PID] => data [type] [data] [final]<br>
- *
- * Consumes:<br>
- *     MMU => allocate [pid] [blocks] [loading]<br>
- *     MMU => free [pid] [blocks]<br>
- *     MMU => swapIn [pid]<br>
- *     MMU => read [pid] [address] [final]<br>
- *     MMU => write [pid] [address] [type] [data] [final]<br>
- *     MMU => drop [pid]<br>
+ * Provides read and write access to memory.
  *
  * @author cd00827
  */
@@ -47,6 +31,16 @@ public class MMU implements Runnable {
     private final ReentrantLock swapLock;
     private final List<PCB> swappable;
 
+    /**
+     * Constructor
+     * @param pageSize Size of memory pages in blocks
+     * @param pageNumber Number of pages, multiplied by pageSize to get the size of physical memory
+     * @param clockSpeed Number of operations to perform per second
+     * @param mailbox Mailbox to control this MMU with
+     * @param log Log to output messages to
+     * @param swapLock Lock to use for synchronising swap operations
+     * @param swappable List to use for getting the currently swappable processes
+     */
     public MMU(int pageSize, int pageNumber, double clockSpeed, Mailbox mailbox, ObservableList<String> log, ReentrantLock swapLock, List<PCB> swappable) {
         this.ram = new String[pageSize * pageNumber];
         this.pageSize = pageSize;
@@ -63,10 +57,17 @@ public class MMU implements Runnable {
         this.swappable = swappable;
     }
 
+    /**
+     * Write a message to the log
+     * @param message Message
+     */
     private void log(String message) {
         Platform.runLater(() -> this.log.add(message));
     }
 
+    /**
+     * Entry point when starting the MMU thread
+     */
     @Override
     public void run() {
         while (true) {
@@ -249,7 +250,7 @@ public class MMU implements Runnable {
      * @return [status, data]<br>
      *     Status is either "success" or "error"
      */
-    public String[] read(int pid, int address) {
+    private String[] read(int pid, int address) {
         int page = address / this.pageSize;
         int offset = address % this.pageSize;
         //Check process has access to address
@@ -274,7 +275,7 @@ public class MMU implements Runnable {
      * @param data Data to write
      * @return True if successful, false if process does not have access to requested address
      */
-    public boolean write(int pid, int address, String data) {
+    private boolean write(int pid, int address, String data) {
         int page = address / this.pageSize;
         int offset = address % this.pageSize;
         if (this.pageTable.get(pid).containsKey(page)) {
@@ -292,7 +293,7 @@ public class MMU implements Runnable {
      * -1: Not enough free memory<br>
      * -2: Tried to allocate more memory than available to the system<br>
      */
-    public int allocate(int pid, int blocks) {
+    private int allocate(int pid, int blocks) {
         int pages = (int)Math.ceil((double)blocks / this.pageSize);
         int freePages = 0;
         int currentPages = 0;
@@ -350,7 +351,7 @@ public class MMU implements Runnable {
      * @return True: Success<br>
      *     False: Attempted to free more memory than allocated<br>
      */
-    public boolean free(int pid, int blocks) {
+    private boolean free(int pid, int blocks) {
         int pages = (int)Math.ceil((double)blocks / this.pageSize);
 
         //Check that process has enough pages allocated
@@ -374,7 +375,11 @@ public class MMU implements Runnable {
         return true;
     }
 
-    public void flushProcess(int pid) {
+    /**
+     * Free all memory allocated to a process
+     * @param pid PID of process to flush
+     */
+    private void flushProcess(int pid) {
         int blocks = this.pageTable.get(pid).size() * this.pageSize;
         //No error handling should be needed as method calculates memory to free using page table
         this.free(pid, blocks);
@@ -386,13 +391,15 @@ public class MMU implements Runnable {
      * functioning correctly.
      * @param pid PID of process to swap out
      */
-    public void swapOut(int pid) {
+    private void swapOut(int pid) {
         File dir = new File("swap");
         File file = new File("swap", pid + ".txt");
         try {
+            //Create swap directory
             if (!dir.exists()) {
                 Files.createDirectory(dir.toPath());
             }
+            //Write contents of memory to file
             Files.deleteIfExists(file.toPath());
             BufferedWriter writer = new BufferedWriter(new FileWriter(file));
             for (Map.Entry<Integer, Integer> page : this.pageTable.get(pid).entrySet()) {
@@ -421,7 +428,7 @@ public class MMU implements Runnable {
      * @return True: Success<br>
      *     False: Could not allocate enough memory<br>
      */
-    public boolean swapIn(int pid) {
+    private boolean swapIn(int pid) {
         File file = new File("swap", pid + ".txt");
         try {
             //Get required memory
