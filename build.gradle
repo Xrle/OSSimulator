@@ -2,10 +2,11 @@ plugins {
     id 'java'
     id 'application'
     id 'org.openjfx.javafxplugin' version '0.0.8'
+    id 'org.beryx.jlink' version '2.12.0'
 }
 
 group 'com.cd00827'
-version '1.0-SNAPSHOT'
+version '1.0'
 
 repositories {
     mavenCentral()
@@ -13,6 +14,7 @@ repositories {
 
 dependencies {
     testImplementation group: 'junit', name: 'junit', version: '4.12'
+
 }
 
 java {
@@ -25,4 +27,10 @@ javafx {
     modules = [ 'javafx.controls', 'javafx.fxml' ]
 }
 
-mainClassName = 'com.cd00827.OSSimulator.MainApp'
+jlink {
+    launcher {
+        name = 'OSSimulator'
+    }
+}
+
+mainClassName = 'OSSimulator.main/com.cd00827.OSSimulator.MainApp'
