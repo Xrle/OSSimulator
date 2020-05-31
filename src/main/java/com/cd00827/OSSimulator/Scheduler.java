@@ -15,7 +15,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 
 /**
- * Process scheduler, uses a combination of a round robin and multi-level feedback queues to schedule the execution of
+ * Process scheduler, uses a combination of round robin and priority scheduling to schedule the execution of
  * multiple processes concurrently
  * @author cd00827
  **/
