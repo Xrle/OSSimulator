@@ -1,5 +1,4 @@
-# OSSimulator
-Operating System Simulator for Operating Systems module.
+# Operating System Simulator
 Simulates a Process Scheduler and Memory Management Unit on top of a simulated CPU's instruction set.
 
 Includes a GUI written using the OpenJFX library.
